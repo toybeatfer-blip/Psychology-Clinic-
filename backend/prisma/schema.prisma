@@ -1,0 +1,194 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String       @id @default(uuid())
+  email            String       @unique
+  passwordHash     String
+  fullName         String
+  role             String       @default("THERAPIST")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  profile          TherapistProfile?
+  clinicSettings   ClinicSettings?
+  patients         Patient[]
+  appointments     Appointment[]
+  clinicalNotes    ClinicalNote[]
+  attachments      Attachment[]
+
+  @@map("users")
+}
+
+model TherapistProfile {
+  id               String       @id @default(uuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  professionalId   String?
+  specialty        String?
+  phone            String?
+  clinicAddress    String?
+  bio              String?
+  hourlyRate       Float?
+  currency         String       @default("USD")
+  avatarUrl        String?
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("therapist_profiles")
+}
+
+model ClinicSettings {
+  id                String       @id @default(uuid())
+  userId            String       @unique
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  clinicName        String       @default("PsychoCare Consultorio")
+  tagline           String?      @default("Centro de Psicología y Bienestar Emocional")
+  logoUrl           String?
+  primaryColor      String       @default("#0d9488")
+  secondaryColor    String       @default("#0f766e")
+  themeMode         String       @default("light") // light, dark
+  sidebarStyle      String       @default("dark")  // dark, brand, light
+  phone             String?
+  email             String?
+  website           String?
+  address           String?
+  taxId             String?      // RFC / CUIT / RUC / NIF
+  receiptFooter     String?
+  appointmentNotice String?
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@map("clinic_settings")
+}
+
+model Patient {
+  id                 String       @id @default(uuid())
+  therapistId        String
+  therapist          User         @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+
+  fullName           String
+  email              String?
+  phone              String
+  birthDate          DateTime?
+  gender             String?
+  occupation         String?
+  maritalStatus      String?
+  address            String?
+
+  emergencyName      String?
+  emergencyPhone     String?
+  emergencyRelation  String?
+
+  initialReason      String
+  clinicalBackground String?
+  currentMedication  String?
+  isActive           Boolean      @default(true)
+
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  appointments       Appointment[]
+  clinicalNotes      ClinicalNote[]
+  attachments        Attachment[]
+
+  @@index([therapistId])
+  @@index([fullName])
+  @@map("patients")
+}
+
+model Appointment {
+  id               String               @id @default(uuid())
+  therapistId      String
+  therapist        User                 @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  
+  patientId        String
+  patient          Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  startDateTime    DateTime
+  endDateTime      DateTime
+  
+  modality         String               @default("IN_PERSON")
+  status           String               @default("SCHEDULED")
+  
+  meetingUrl       String?
+  locationNotes    String?
+  notes            String?
+  price            Float?
+  isPaid           Boolean              @default(false)
+
+  clinicalNote     ClinicalNote?
+
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([therapistId, startDateTime])
+  @@index([patientId])
+  @@map("appointments")
+}
+
+model ClinicalNote {
+  id                     String       @id @default(uuid())
+  therapistId            String
+  therapist              User         @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+
+  patientId              String
+  patient                Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  appointmentId          String?      @unique
+  appointment            Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  sessionNumber          Int?
+  sessionDate            DateTime     @default(now())
+
+  reasonForSession       String
+  behavioralObservations String?
+  diagnosisHypothesis    String?
+  interventionsApplied   String
+  treatmentPlanAndTasks  String?
+  
+  isConfidential         Boolean      @default(true)
+
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  attachments            Attachment[]
+
+  @@index([therapistId, patientId])
+  @@index([sessionDate])
+  @@map("clinical_notes")
+}
+
+model Attachment {
+  id               String         @id @default(uuid())
+  therapistId      String
+  therapist        User           @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+
+  patientId        String
+  patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  clinicalNoteId   String?
+  clinicalNote     ClinicalNote?  @relation(fields: [clinicalNoteId], references: [id], onDelete: SetNull)
+
+  fileName         String
+  fileUrl          String
+  fileSize         Int
+  mimeType         String
+  type             String         @default("OTHER")
+  description      String?
+
+  uploadedAt       DateTime       @default(now())
+
+  @@index([therapistId, patientId])
+  @@map("attachments")
+}

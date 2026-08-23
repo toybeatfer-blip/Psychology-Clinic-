@@ -1,0 +1,218 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// 1. Terapeuta / Usuario
+// -------------------------------------------------------------
+model User {
+  id               String       @id @default(uuid())
+  email            String       @unique
+  passwordHash     String
+  fullName         String
+  role             String       @default("THERAPIST")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Perfil profesional y configuración
+  profile          TherapistProfile?
+  clinicSettings   ClinicSettings?
+
+  // Relaciones con aislamiento por terapeuta
+  patients         Patient[]
+  appointments     Appointment[]
+  clinicalNotes    ClinicalNote[]
+  attachments      Attachment[]
+
+  @@map("users")
+}
+
+model TherapistProfile {
+  id               String       @id @default(uuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  professionalId   String?      // Cédula o Colegiado profesional
+  specialty        String?      // Ej: Clínica, Cognitivo-Conductual, Sistémica
+  phone            String?
+  clinicAddress    String?
+  bio              String?
+  hourlyRate       Decimal?     @db.Decimal(10, 2)
+  currency         String       @default("USD")
+  avatarUrl        String?
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("therapist_profiles")
+}
+
+model ClinicSettings {
+  id                String       @id @default(uuid())
+  userId            String       @unique
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  clinicName        String       @default("PsychoCare Consultorio")
+  tagline           String?      @default("Centro de Psicología y Bienestar Emocional")
+  logoUrl           String?
+  primaryColor      String       @default("#0d9488")
+  secondaryColor    String       @default("#0f766e")
+  themeMode         String       @default("light") // light, dark
+  sidebarStyle      String       @default("dark")  // dark, brand, light
+  phone             String?
+  email             String?
+  website           String?
+  address           String?
+  taxId             String?      // RFC / CUIT / RUC / NIF
+  receiptFooter     String?
+  appointmentNotice String?
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@map("clinic_settings")
+}
+
+// -------------------------------------------------------------
+// 2. Gestión de Pacientes
+// -------------------------------------------------------------
+model Patient {
+  id                 String       @id @default(uuid())
+  therapistId        String
+  therapist          User         @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+
+  // Datos Personales
+  fullName           String
+  email              String?
+  phone              String
+  birthDate          DateTime?
+  gender             String?      // Masculino, Femenino, No binario, Otro
+  occupation         String?
+  maritalStatus      String?      // Soltero, Casado, Unión libre, etc.
+  address            String?
+
+  // Contacto de Emergencia
+  emergencyName      String?
+  emergencyPhone     String?
+  emergencyRelation  String?
+
+  // Datos Clínicos Iniciales
+  initialReason      String       @db.Text // Motivo de consulta inicial
+  clinicalBackground String?      @db.Text // Antecedentes médicos / psiquiátricos
+  currentMedication  String?      @db.Text // Medicación actual
+  isActive           Boolean      @default(true)
+
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  // Relaciones
+  appointments       Appointment[]
+  clinicalNotes      ClinicalNote[]
+  attachments        Attachment[]
+
+  @@index([therapistId])
+  @@index([fullName])
+  @@map("patients")
+}
+
+// -------------------------------------------------------------
+// 3. Agenda y Citas
+// -------------------------------------------------------------
+model Appointment {
+  id               String               @id @default(uuid())
+  therapistId      String
+  therapist        User                 @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  
+  patientId        String
+  patient          Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  startDateTime    DateTime
+  endDateTime      DateTime
+  
+  modality         String               @default("IN_PERSON") // IN_PERSON, ONLINE, HOME_VISIT
+  status           String               @default("SCHEDULED") // SCHEDULED, CONFIRMED, COMPLETED, CANCELLED, NO_SHOW
+  
+  meetingUrl       String?              // Enlace de Zoom / Google Meet / Teams si es online
+  locationNotes    String?              // Consultorio 2A, etc.
+  notes            String?              @db.Text
+  price            Decimal?             @db.Decimal(10, 2)
+  isPaid           Boolean              @default(false)
+
+  // Vinculación opcional con la nota de sesión resultante
+  clinicalNote     ClinicalNote?
+
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([therapistId, startDateTime])
+  @@index([patientId])
+  @@map("appointments")
+}
+
+// -------------------------------------------------------------
+// 4. Expediente Clínico y Notas de Sesión
+// -------------------------------------------------------------
+model ClinicalNote {
+  id                     String       @id @default(uuid())
+  therapistId            String
+  therapist              User         @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+
+  patientId              String
+  patient                Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  appointmentId          String?      @unique
+  appointment            Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  sessionNumber          Int?         // Número correlativo de sesión
+  sessionDate            DateTime     @default(now())
+
+  // Estructura Clínica Profesional
+  reasonForSession       String       @db.Text
+  behavioralObservations String?      @db.Text
+  diagnosisHypothesis    String?      @db.Text
+  interventionsApplied   String       @db.Text
+  treatmentPlanAndTasks  String?      @db.Text
+  
+  isConfidential         Boolean      @default(true)
+
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  attachments            Attachment[]
+
+  @@index([therapistId, patientId])
+  @@index([sessionDate])
+  @@map("clinical_notes")
+}
+
+// -------------------------------------------------------------
+// 5. Archivos Adjuntos y Documentos
+// -------------------------------------------------------------
+model Attachment {
+  id               String         @id @default(uuid())
+  therapistId      String
+  therapist        User           @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+
+  patientId        String
+  patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  clinicalNoteId   String?
+  clinicalNote     ClinicalNote?  @relation(fields: [clinicalNoteId], references: [id], onDelete: SetNull)
+
+  fileName         String
+  fileUrl          String
+  fileSize         Int            // Tamaño en bytes
+  mimeType         String
+  type             String         @default("OTHER")
+  description      String?
+
+  uploadedAt       DateTime       @default(now())
+
+  @@index([therapistId, patientId])
+  @@map("attachments")
+}
