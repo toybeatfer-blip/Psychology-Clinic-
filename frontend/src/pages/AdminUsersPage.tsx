@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { api } from '../lib/api';
-import { syncLocalWithCloud } from '../lib/cloudSync';
+import { syncLocalWithCloud, getDeterministicUserId } from '../lib/cloudSync';
 import { RegisteredUserSummary, Patient, Appointment, ClinicalNote } from '../types/index';
 import { formatDate, formatTime } from '../lib/utils';
 import {
@@ -92,7 +92,24 @@ export const AdminUsersPage: React.FC = () => {
       // Si cloudState contiene información de tenants más completa, fusionar directamente
       if (cloudState && cloudState.tenants) {
         summaries = summaries.map((u) => {
-          const tenant = cloudState.tenants[u.id];
+          const emailKey = (u.email || '').toLowerCase();
+          const cleanEmail = emailKey.replace(/[^a-z0-9]/g, '_');
+          const canonicalId = u.id;
+
+          let tenant =
+            cloudState.tenants[canonicalId] ||
+            cloudState.tenants[getDeterministicUserId(u.email)] ||
+            cloudState.tenants[emailKey];
+
+          if (!tenant) {
+            const foundKey = Object.keys(cloudState.tenants).find(
+              (k) => (cleanEmail && k.includes(cleanEmail)) || (canonicalId && canonicalId.startsWith('therapist-') && k.includes(canonicalId))
+            );
+            if (foundKey) {
+              tenant = cloudState.tenants[foundKey];
+            }
+          }
+
           if (tenant) {
             const finalPatients = (tenant.patients && tenant.patients.length > 0) ? tenant.patients : (u.patients || []);
             const finalAppts = (tenant.appointments && tenant.appointments.length > 0) ? tenant.appointments : (u.appointments || []);

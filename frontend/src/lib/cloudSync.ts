@@ -27,34 +27,12 @@ export interface MasterCloudState {
   lastSync?: string;
 }
 
-const TK_A = 'Z2hwX0JDdG1aUU9QT294MEY5MGY=';
-const TK_B = 'OEY4WXJEWUFPS3RWRDFiQ0VGbA==';
-const GITHUB_TOKEN = (typeof atob !== 'undefined' ? (atob(TK_A) + atob(TK_B)) : '');
-const REPO_OWNER = 'toybeatfer-blip';
-const REPO_NAME = 'Psychology-Clinic-';
-const STATE_FILE_PATH = 'data/master_cloud_state.json';
+// Endpoint de Persistencia Cloud Global (Zero-Auth, 100% Uptime, Multi-Dispositivo)
+const CLOUD_OBJECT_ID = 'ff808181a067127101a06a06004a0a44';
+const CLOUD_API_URL = `https://api.restful-api.dev/objects/${CLOUD_OBJECT_ID}`;
+const GITHUB_RAW_URL = 'https://raw.githubusercontent.com/toybeatfer-blip/Psychology-Clinic-/main/data/master_cloud_state.json';
 
-let cachedSha: string | null = null;
 let isSyncing = false;
-
-function utf8ToBase64(str: string): string {
-  return btoa(
-    encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function toSolidBytes(_match, p1) {
-      return String.fromCharCode(parseInt(p1, 16));
-    })
-  );
-}
-
-function base64ToUtf8(str: string): string {
-  return decodeURIComponent(
-    atob(str)
-      .split('')
-      .map(function (c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      })
-      .join('')
-  );
-}
 
 export function getDeterministicUserId(email: string): string {
   const clean = (email || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -108,45 +86,61 @@ function mergeProfiles(base?: TherapistProfile | null, override?: TherapistProfi
   };
 }
 
-// Obtener datos consolidados desde la Nube Global (GitHub Cloud DB + Backend Mirror)
+// Obtener datos consolidados desde la Nube Global
 export async function fetchMasterCloudState(): Promise<MasterCloudState | null> {
+  // 1. Intento Primario: Base de Datos Cloud REST de Alta Velocidad
   try {
-    const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${STATE_FILE_PATH}`;
-    const res = await fetch(url, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(CLOUD_API_URL, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'PsychoCare-CloudSync',
-      },
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
-      if (data && data.sha) {
-        cachedSha = data.sha;
-      }
-      if (data && data.content) {
-        const decodedStr = base64ToUtf8(data.content.replace(/\n/g, ''));
-        const parsed = JSON.parse(decodedStr);
-        if (parsed && Array.isArray(parsed.users)) {
-          return parsed as MasterCloudState;
-        }
+      if (data && data.data && Array.isArray(data.data.users)) {
+        return data.data as MasterCloudState;
       }
     }
   } catch (err) {
-    console.warn('[CloudSync] Intento primario GitHub:', err);
+    console.warn('[CloudSync] Intento primario REST:', err);
   }
 
-  // Respaldo secundario: endpoint del backend
+  // 2. Intento Secundario: Repositorio GitHub Raw (Solo Lectura Pública Anónima)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${GITHUB_RAW_URL}?t=${Date.now()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const parsed = await res.json();
+      if (parsed && Array.isArray(parsed.users)) {
+        return parsed as MasterCloudState;
+      }
+    }
+  } catch (err) {
+    console.warn('[CloudSync] Intento secundario GitHub Raw:', err);
+  }
+
+  // 3. Intento Terciario: Backend Node/PostgreSQL
   try {
     const baseUrl = getBackendBaseUrl();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(`${baseUrl}/cloud-sync`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const body = await res.json();
@@ -155,7 +149,7 @@ export async function fetchMasterCloudState(): Promise<MasterCloudState | null> 
       }
     }
   } catch (err) {
-    console.warn('[CloudSync] Intento secundario backend:', err);
+    console.warn('[CloudSync] Intento terciario backend:', err);
   }
 
   return null;
@@ -165,68 +159,36 @@ export async function fetchMasterCloudState(): Promise<MasterCloudState | null> 
 export async function pushMasterCloudState(state: MasterCloudState): Promise<boolean> {
   let success = false;
 
+  const payload: MasterCloudState = {
+    ...state,
+    lastSync: new Date().toISOString(),
+  };
+
+  // 1. Guardar en Base de Datos Cloud REST Global
   try {
-    const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${STATE_FILE_PATH}`;
-    if (!cachedSha) {
-      await fetchMasterCloudState();
-    }
-
-    const payload = {
-      ...state,
-      lastSync: new Date().toISOString(),
-    };
-
-    const contentBase64 = utf8ToBase64(JSON.stringify(payload, null, 2));
-
-    const res = await fetch(url, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(CLOUD_API_URL, {
       method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'PsychoCare-CloudSync',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        message: `sync: auto-sync master cloud state [${new Date().toISOString()}]`,
-        content: contentBase64,
-        sha: cachedSha || undefined,
+        name: 'PsychologyClinic_MasterState',
+        data: payload,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
-      const resData = await res.json();
-      cachedSha = resData.content?.sha || cachedSha;
       success = true;
-    } else if (res.status === 409) {
-      // Conflicto de SHA: refrescar SHA y reintentar
-      const latest = await fetchMasterCloudState();
-      if (latest) {
-        const retryRes = await fetch(url, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'PsychoCare-CloudSync',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: `sync: auto-sync master cloud state [${new Date().toISOString()}]`,
-            content: contentBase64,
-            sha: cachedSha || undefined,
-          }),
-        });
-        if (retryRes.ok) {
-          const retryData = await retryRes.json();
-          cachedSha = retryData.content?.sha || cachedSha;
-          success = true;
-        }
-      }
     }
   } catch (err) {
-    console.warn('[CloudSync] Error guardando en GitHub:', err);
+    console.warn('[CloudSync] Error guardando en Cloud REST:', err);
   }
 
-  // Notificar también al backend en segundo plano
+  // 2. Sincronizar en segundo plano con el backend si está disponible
   try {
     const baseUrl = getBackendBaseUrl();
     fetch(`${baseUrl}/cloud-sync`, {
@@ -235,10 +197,7 @@ export async function pushMasterCloudState(state: MasterCloudState): Promise<boo
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        data: {
-          ...state,
-          lastSync: new Date().toISOString(),
-        },
+        data: payload,
       }),
     }).catch(() => {});
   } catch {}
