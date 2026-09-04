@@ -77,6 +77,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ]).catch(() => {});
     }
 
+    // Sincronizar con la nube antes de autenticar para asegurar que cuentas creadas en otros dispositivos estén disponibles
+    try {
+      await Promise.race([
+        syncLocalWithCloud(),
+        new Promise((r) => setTimeout(r, 2000))
+      ]);
+    } catch (e) {}
+
     const res = await api.post<{
       success: boolean;
       data: { user: User; token: string };
