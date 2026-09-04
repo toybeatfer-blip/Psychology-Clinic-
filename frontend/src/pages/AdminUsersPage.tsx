@@ -43,20 +43,20 @@ export const AdminUsersPage: React.FC = () => {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return parsed.map((u: any) => ({
-            id: u.id,
-            email: u.email,
-            fullName: u.fullName,
-            role: u.role,
+          return parsed.filter(Boolean).map((u: any) => ({
+            id: u.id || `user-${Date.now()}`,
+            email: u.email || '',
+            fullName: u.fullName || u.email || 'Terapeuta Registrado',
+            role: u.role || 'THERAPIST',
             status: u.status || 'ACTIVE',
             isSuspended: !!u.isSuspended,
             createdAt: u.createdAt || new Date().toISOString(),
-            patientsCount: 0,
-            appointmentsCount: 0,
-            notesCount: 0,
-            patients: [],
-            appointments: [],
-            notes: [],
+            patientsCount: u.patientsCount || 0,
+            appointmentsCount: u.appointmentsCount || 0,
+            notesCount: u.notesCount || 0,
+            patients: u.patients || [],
+            appointments: u.appointments || [],
+            notes: u.notes || [],
             profile: u.profile,
             clinicSettings: u.clinicSettings,
           }));
@@ -259,11 +259,15 @@ export const AdminUsersPage: React.FC = () => {
   };
 
   const filteredUsers = users.filter((u) => {
-    const term = search.toLowerCase();
+    if (!u) return false;
+    const term = (search || '').toLowerCase();
+    const fullName = (u.fullName || '').toLowerCase();
+    const email = (u.email || '').toLowerCase();
+    const specialty = (u.profile?.specialty || '').toLowerCase();
     const matchesSearch =
-      u.fullName.toLowerCase().includes(term) ||
-      u.email.toLowerCase().includes(term) ||
-      (u.profile?.specialty && u.profile.specialty.toLowerCase().includes(term));
+      fullName.includes(term) ||
+      email.includes(term) ||
+      specialty.includes(term);
 
     const isSuspended = u.isSuspended || u.status === 'SUSPENDED';
 
@@ -535,11 +539,11 @@ export const AdminUsersPage: React.FC = () => {
                               : 'bg-teal-50 text-teal-700 border border-teal-100'
                           }`}
                         >
-                          {u.fullName.charAt(0).toUpperCase()}
+                          {(u.fullName || u.email || 'T').charAt(0).toUpperCase()}
                         </div>
                         <div>
                           <h4 className="font-bold text-slate-900 text-sm leading-tight flex items-center gap-1.5">
-                            <span>{u.fullName}</span>
+                            <span>{u.fullName || u.email || 'Terapeuta'}</span>
                             {isSuperAdmin && (
                               <span title="Super Administrador">
                                 <Award className="w-4 h-4 text-amber-500 shrink-0" />

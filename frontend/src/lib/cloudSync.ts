@@ -208,8 +208,10 @@ export async function pushMasterCloudState(state: MasterCloudState): Promise<boo
 // Registrar o sincronizar inmediatamente un usuario en la nube
 export async function registerOrUpdateUserInCloud(user: CloudStoredUser): Promise<void> {
   try {
+    if (!user || !user.email) return;
+    const targetEmail = (user.email || '').toLowerCase();
     const localUsers: CloudStoredUser[] = JSON.parse(localStorage.getItem('psychocare_db_users') || '[]');
-    const idx = localUsers.findIndex((u) => u.email.toLowerCase() === user.email.toLowerCase());
+    const idx = localUsers.findIndex((u) => (u?.email || '').toLowerCase() === targetEmail);
     if (idx !== -1) {
       localUsers[idx] = {
         ...localUsers[idx],
@@ -334,8 +336,8 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
 
     // Asegurar que el usuario activo esté en la lista local de usuarios
     if (activeUser && activeUser.email && activeUser.role !== 'ADMIN') {
-      const emailLower = activeUser.email.toLowerCase();
-      if (!localUsers.some((u) => u.email.toLowerCase() === emailLower)) {
+      const emailLower = (activeUser.email || '').toLowerCase();
+      if (!localUsers.some((u) => (u?.email || '').toLowerCase() === emailLower)) {
         localUsers.push({
           ...activeUser,
           createdAt: activeUser.createdAt || new Date().toISOString(),
@@ -351,7 +353,7 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
     if (cloudState && Array.isArray(cloudState.users)) {
       cloudState.users.forEach((cloudUser) => {
         if (cloudUser && cloudUser.email && !deletedIds.has(cloudUser.id)) {
-          mergedUsersMap.set(cloudUser.email.toLowerCase(), cloudUser);
+          mergedUsersMap.set((cloudUser.email || '').toLowerCase(), cloudUser);
         }
       });
     }
@@ -360,7 +362,7 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
     const activeLocalUsers = localUsers.filter((u) => u && u.id && !deletedIds.has(u.id));
     activeLocalUsers.forEach((localUser) => {
       if (!localUser || !localUser.email) return;
-      const emailKey = localUser.email.toLowerCase();
+      const emailKey = (localUser.email || '').toLowerCase();
       const existingCloud = mergedUsersMap.get(emailKey);
 
       if (!existingCloud) {
@@ -385,11 +387,12 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
       }
     });
 
-    const mergedUsers = Array.from(mergedUsersMap.values());
+    const mergedUsers = Array.from(mergedUsersMap.values()).filter(Boolean);
     localStorage.setItem('psychocare_db_users', JSON.stringify(mergedUsers));
 
-    if (activeUser) {
-      const latestActive = mergedUsers.find((u) => u.id === activeUser.id || u.email.toLowerCase() === activeUser.email.toLowerCase());
+    if (activeUser && activeUser.email) {
+      const activeEmailLower = (activeUser.email || '').toLowerCase();
+      const latestActive = mergedUsers.find((u) => (u?.id === activeUser.id) || ((u?.email || '').toLowerCase() === activeEmailLower));
       if (latestActive) {
         const mergedActive = { ...activeUser, ...latestActive };
         localStorage.setItem('psychocare_user', JSON.stringify(mergedActive));
@@ -401,8 +404,9 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
     const mergedTenants: Record<string, CloudTenantData> = {};
 
     mergedUsers.forEach((u) => {
+      if (!u || !u.id) return;
       const canonicalId = u.id;
-      const emailKey = u.email.toLowerCase();
+      const emailKey = (u.email || '').toLowerCase();
       const cleanEmail = emailKey.replace(/[^a-z0-9]/g, '_');
       const pKey = `psychocare_db_patients_${canonicalId}`;
       const aKey = `psychocare_db_appointments_${canonicalId}`;

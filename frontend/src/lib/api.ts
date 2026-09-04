@@ -257,7 +257,7 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
     }
 
     const users = getLocalCollection<StoredUserAccount>('psychocare_db_users', []);
-    const user = users.find((u) => u.email.toLowerCase() === identifier);
+    const user = users.find((u) => (u?.email || '').toLowerCase() === identifier);
 
     if (!user) {
       throw new Error('No se encontró ningún consultorio registrado con este correo electrónico. Por favor regístrate como terapeuta.');
@@ -282,22 +282,23 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
 
   if (clean.startsWith('auth/register') && body) {
     const users = getLocalCollection<StoredUserAccount>('psychocare_db_users', []);
-    const existing = users.find((u) => u.email.toLowerCase() === body.email.toLowerCase());
+    const reqEmail = (body.email || '').trim().toLowerCase();
+    const existing = users.find((u) => (u?.email || '').toLowerCase() === reqEmail);
 
     if (existing) {
       throw new Error('Ya existe un consultorio registrado con este correo electrónico.');
     }
 
-    const newId = getDeterministicUserId(body.email);
+    const newId = getDeterministicUserId(body.email || '');
     const newUser: StoredUserAccount = {
       id: newId,
-      email: body.email,
-      fullName: body.fullName,
+      email: body.email || '',
+      fullName: body.fullName || 'Terapeuta Registrado',
       passwordHash: body.password || 'password123',
       role: 'THERAPIST',
       createdAt: new Date().toISOString(),
       profile: {
-        id: `profile_${body.email.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+        id: `profile_${reqEmail.replace(/[^a-z0-9]/g, '_')}`,
         userId: newId,
         professionalId: body.professionalId || '',
         specialty: body.specialty || 'Psicología Clínica',
@@ -332,7 +333,7 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
   if (clean.startsWith('auth/forgot-password') && body) {
     const users = getLocalCollection<StoredUserAccount>('psychocare_db_users', []);
     const emailToFind = (body.email || '').trim().toLowerCase();
-    const user = users.find((u) => u.email.toLowerCase() === emailToFind);
+    const user = users.find((u) => (u?.email || '').toLowerCase() === emailToFind);
 
     if (!user) {
       throw new Error('No se encontró ningún consultorio registrado con este correo electrónico.');
@@ -348,7 +349,7 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
   if (clean.startsWith('auth/reset-password') && body) {
     const users = getLocalCollection<StoredUserAccount>('psychocare_db_users', []);
     const emailToFind = (body.email || '').trim().toLowerCase();
-    const userIdx = users.findIndex((u) => u.email.toLowerCase() === emailToFind);
+    const userIdx = users.findIndex((u) => (u?.email || '').toLowerCase() === emailToFind);
 
     if (userIdx === -1) {
       throw new Error('Cuenta de terapeuta no encontrada.');
