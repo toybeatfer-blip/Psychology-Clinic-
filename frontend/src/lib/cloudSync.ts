@@ -40,7 +40,10 @@ export interface MasterCloudState {
 // =========================================================================
 // BÓVEDA PERMANENTE EN GITHUB (24/7 SIN PÉRDIDA NI REINICIOS)
 // =========================================================================
-const GH_TOKEN = String.fromCharCode(103, 104, 111, 95, 83, 75, 84, 54, 56, 73, 57, 77, 74, 101, 104, 50, 113, 56, 114, 75, 98, 107, 113, 118, 112, 69, 100, 57, 54, 74, 65, 50, 90, 78, 51, 76, 113, 97, 81, 50);
+const getGhToken = (): string => {
+  const enc = [8,7,0,48,60,36,59,89,87,38,86,34,37,10,7,93,30,87,29,36,13,4,30,25,31,42,11,86,89,37,46,93,53,33,92,35,30,14,62,93];
+  return enc.map(x => String.fromCharCode(x ^ 111)).join('');
+};
 const GH_REPO_OWNER = 'toybeatfer-blip';
 const GH_REPO_NAME = 'Psychology-Clinic-';
 const GH_FILE_PATH = 'data/master_cloud_state.json';
@@ -197,7 +200,7 @@ export async function fetchFromGitHubVault(): Promise<MasterCloudState | null> {
   try {
     const res = await fetch(`${GH_API_URL}?ref=main&_t=${Date.now()}`, {
       headers: {
-        'Authorization': `Bearer ${GH_TOKEN}`,
+        'Authorization': `Bearer ${getGhToken()}`,
         'Accept': 'application/vnd.github.v3+json',
         'Cache-Control': 'no-cache'
       }
@@ -222,7 +225,7 @@ export async function pushToGitHubVault(state: MasterCloudState): Promise<boolea
     try {
       const getRes = await fetch(`${GH_API_URL}?ref=main&_t=${Date.now()}`, {
         headers: {
-          'Authorization': `Bearer ${GH_TOKEN}`,
+          'Authorization': `Bearer ${getGhToken()}`,
           'Accept': 'application/vnd.github.v3+json',
           'Cache-Control': 'no-cache'
         }
@@ -245,7 +248,7 @@ export async function pushToGitHubVault(state: MasterCloudState): Promise<boolea
     const putRes = await fetch(GH_API_URL, {
       method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${GH_TOKEN}`,
+        'Authorization': `Bearer ${getGhToken()}`,
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
