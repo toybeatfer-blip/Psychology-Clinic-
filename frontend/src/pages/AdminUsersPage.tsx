@@ -33,6 +33,11 @@ import {
   X,
   Stethoscope,
   Clock,
+  Database,
+  Download,
+  Upload,
+  Globe,
+  Server,
 } from 'lucide-react';
 
 export const AdminUsersPage: React.FC = () => {
@@ -77,6 +82,121 @@ export const AdminUsersPage: React.FC = () => {
   // Modal de Inspección de Actividad en Vivo
   const [inspectingUser, setInspectingUser] = useState<RegisteredUserSummary | null>(null);
   const [inspectTab, setInspectTab] = useState<'patients' | 'appointments' | 'notes'>('patients');
+
+  // Modal de Configuración Cloud & Respaldo
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
+  const [apiUrlInput, setApiUrlInput] = useState<string>(() => {
+    return localStorage.getItem('psychocare_api_url') || '';
+  });
+  const [pingStatus, setPingStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [pingMessage, setPingMessage] = useState('');
+  const [pingLoading, setPingLoading] = useState(false);
+
+  const handleTestPing = async () => {
+    setPingLoading(true);
+    setPingStatus('IDLE');
+    setPingMessage('');
+    try {
+      const target = (apiUrlInput || '').trim() || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api');
+      const cleanTarget = target.replace(/\/+$/, '');
+      const testUrl = cleanTarget.endsWith('/api') ? `${cleanTarget}/cloud-sync` : `${cleanTarget}/api/cloud-sync`;
+      const res = await fetch(testUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+      if (res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setPingStatus('SUCCESS');
+        setPingMessage(`¡Conexión exitosa! Estado HTTP ${res.status}. Base de datos activa.`);
+      } else {
+        setPingStatus('ERROR');
+        setPingMessage(`El servidor respondió con código HTTP ${res.status}: ${res.statusText}`);
+      }
+    } catch (e: any) {
+      setPingStatus('ERROR');
+      setPingMessage(`No se pudo conectar al servidor (${e.message || 'Error de red / CORS'}).`);
+    } finally {
+      setPingLoading(false);
+    }
+  };
+
+  const handleSaveApiUrl = async () => {
+    const clean = apiUrlInput.trim();
+    if (clean) {
+      localStorage.setItem('psychocare_api_url', clean);
+    } else {
+      localStorage.removeItem('psychocare_api_url');
+    }
+    setSuccessMessage('Configuración de conexión guardada.');
+    setTimeout(() => setSuccessMessage(null), 3000);
+    setIsCloudModalOpen(false);
+    await fetchUsers(false);
+  };
+
+  const handleExportBackup = () => {
+    try {
+      const stateToExport = {
+        exportedAt: new Date().toISOString(),
+        version: '1.0.0',
+        users: JSON.parse(localStorage.getItem('psychocare_db_users') || '[]'),
+        tenants: {} as Record<string, any>,
+      };
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('psychocare_db_patients_') || key.startsWith('psychocare_db_appointments_') || key.startsWith('psychocare_db_notes_') || key.startsWith('psychocare_clinic_settings_'))) {
+          const uId = key.split('_')[key.split('_').length - 1];
+          if (!stateToExport.tenants[uId]) {
+            stateToExport.tenants[uId] = {
+              patients: JSON.parse(localStorage.getItem(`psychocare_db_patients_${uId}`) || '[]'),
+              appointments: JSON.parse(localStorage.getItem(`psychocare_db_appointments_${uId}`) || '[]'),
+              notes: JSON.parse(localStorage.getItem(`psychocare_db_notes_${uId}`) || '[]'),
+              clinicSettings: JSON.parse(localStorage.getItem(`psychocare_clinic_settings_${uId}`) || 'null'),
+            };
+          }
+        }
+      }
+
+      const blob = new Blob([JSON.stringify(stateToExport, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `psychocare_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Error al exportar base de datos.');
+    }
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const content = evt.target?.result as string;
+        const parsed = JSON.parse(content);
+        if (parsed && Array.isArray(parsed.users)) {
+          localStorage.setItem('psychocare_db_users', JSON.stringify(parsed.users));
+          if (parsed.tenants && typeof parsed.tenants === 'object') {
+            Object.keys(parsed.tenants).forEach((uId) => {
+              const t = parsed.tenants[uId];
+              if (t.patients) localStorage.setItem(`psychocare_db_patients_${uId}`, JSON.stringify(t.patients));
+              if (t.appointments) localStorage.setItem(`psychocare_db_appointments_${uId}`, JSON.stringify(t.appointments));
+              if (t.notes) localStorage.setItem(`psychocare_db_notes_${uId}`, JSON.stringify(t.notes));
+              if (t.clinicSettings) localStorage.setItem(`psychocare_clinic_settings_${uId}`, JSON.stringify(t.clinicSettings));
+            });
+          }
+          alert('¡Base de datos y consultorios importados con éxito!');
+          window.location.reload();
+        } else {
+          alert('El archivo JSON no tiene el formato esperado.');
+        }
+      } catch (err) {
+        alert('Error al procesar el archivo de respaldo.');
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const fetchUsers = useCallback(async (silent: boolean = false) => {
     if (!silent && users.length === 0) setLoading(true);
@@ -331,7 +451,16 @@ export const AdminUsersPage: React.FC = () => {
         title="Panel Maestro del Super Administrador"
         subtitle="Control global en tiempo real de licencias, consultorios y actividad en vivo"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCloudModalOpen(true)}
+              leftIcon={<Server className="w-4 h-4 text-teal-600" />}
+              title="Configurar servidor API y respaldos"
+            >
+              Base de Datos Cloud
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -824,6 +953,127 @@ export const AdminUsersPage: React.FC = () => {
               <Button variant="ghost" size="sm" onClick={() => setInspectingUser(null)}>
                 Cerrar
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Configuración Cloud & Respaldo */}
+      {isCloudModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center border border-teal-500/30">
+                  <Server className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Conexión a Base de Datos Cloud</h3>
+                  <p className="text-xs text-slate-400">Sincronización universal multi-dispositivo sin anuncios ni límites</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCloudModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* URL del Backend API */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  URL del Servidor API / Backend (Render o Local)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://tu-backend.onrender.com/api o http://localhost:4000/api"
+                    value={apiUrlInput}
+                    onChange={(e) => setApiUrlInput(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTestPing}
+                    isLoading={pingLoading}
+                    leftIcon={<RefreshCw className={`w-4 h-4 ${pingLoading ? 'animate-spin' : ''}`} />}
+                  >
+                    Probar
+                  </Button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Si dejas este campo vacío en tu computadora local, se conectará automáticamente a <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700">http://localhost:4000/api</code>.
+                </p>
+              </div>
+
+              {/* Mensaje de Ping */}
+              {pingStatus === 'SUCCESS' && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{pingMessage}</span>
+                </div>
+              )}
+              {pingStatus === 'ERROR' && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{pingMessage}</span>
+                </div>
+              )}
+
+              {/* Exportar e Importar Respaldo de Base de Datos */}
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Respaldos y Migración de Base de Datos
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Descarga o restaura una copia de seguridad completa de todos los terapeutas, consultorios y pacientes en un archivo JSON.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleExportBackup}
+                    leftIcon={<Download className="w-4 h-4" />}
+                  >
+                    Exportar Todo (.json)
+                  </Button>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportBackup}
+                      className="hidden"
+                    />
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200">
+                      <Upload className="w-4 h-4 text-slate-500" />
+                      Importar Respaldo (.json)
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setApiUrlInput('');
+                  localStorage.removeItem('psychocare_api_url');
+                }}
+              >
+                Restablecer por Defecto
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setIsCloudModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button variant="primary" size="sm" onClick={handleSaveApiUrl}>
+                  Guardar Conexión
+                </Button>
+              </div>
             </div>
           </div>
         </div>

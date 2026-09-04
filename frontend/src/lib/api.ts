@@ -45,9 +45,18 @@ export function getApiBaseUrl(): string {
   return '/api';
 }
 
+export function hasCustomBackendConfigured(): boolean {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('psychocare_api_url');
+    if (custom && custom.trim() && custom.trim() !== '/api') return true;
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return true;
+  }
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) return true;
+  return false;
+}
+
 function shouldUseLocalEngine(): boolean {
-  // Siempre utilizar el motor distribuido local y de sincronización global en la nube
-  return true;
+  return !hasCustomBackendConfigured();
 }
 
 // -------------------------------------------------------------
