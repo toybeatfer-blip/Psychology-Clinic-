@@ -98,10 +98,16 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       window.addEventListener('focus', handleFocus);
       document.addEventListener('visibilitychange', handleFocus);
 
+      const handleCloudSynced = () => {
+        fetchSettings(true);
+      };
+      window.addEventListener('psychocare_cloud_synced', handleCloudSynced);
+
       return () => {
         clearInterval(interval);
         window.removeEventListener('focus', handleFocus);
         document.removeEventListener('visibilitychange', handleFocus);
+        window.removeEventListener('psychocare_cloud_synced', handleCloudSynced);
       };
     }
   }, [user, fetchSettings]);
