@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
-import { cn } from '../../lib/utils.js';
+import { cn } from '../../lib/utils';
 
 interface ModalProps {
   isOpen: boolean;
@@ -48,38 +48,38 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2.5 sm:p-4">
+      {/* Backdrop con tap-to-close para móviles */}
       <div
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity animate-fade-in"
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity cursor-pointer"
         onClick={onClose}
       />
 
-      <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
-        <div
-          className={cn(
-            'relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all w-full my-8 border border-slate-100',
-            maxWidths[maxWidth]
-          )}
-        >
-          {/* Header */}
-          <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
-              {description && <p className="text-xs text-slate-500 mt-1">{description}</p>}
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      {/* Modal Container */}
+      <div
+        className={cn(
+          'relative bg-white rounded-2xl sm:rounded-3xl text-left shadow-2xl transition-all w-full my-auto border border-slate-100 flex flex-col max-h-[94vh] z-10 overflow-hidden',
+          maxWidths[maxWidth]
+        )}
+      >
+        {/* Sticky Header con botón de cerrar táctil */}
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-20">
+          <div className="min-w-0 flex-1 pr-3">
+            <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">{title}</h3>
+            {description && <p className="text-xs text-slate-500 mt-0.5 truncate">{description}</p>}
           </div>
-
-          {/* Body */}
-          <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 sm:p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200/80 rounded-xl transition-colors cursor-pointer touch-manipulation flex-shrink-0"
+            title="Cerrar ventana (Esc)"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
+
+        {/* Scrollable Body */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 overscroll-contain">{children}</div>
       </div>
     </div>
   );

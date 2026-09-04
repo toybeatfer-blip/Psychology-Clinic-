@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext.js';
-import { DashboardData, Appointment, Patient } from '../types/index.js';
-import { api } from '../lib/api.js';
-import { Header } from '../components/layout/Header.js';
-import { MetricCards } from '../components/dashboard/MetricCards.js';
-import { UpcomingAppointments } from '../components/dashboard/UpcomingAppointments.js';
-import { PatientFormModal } from '../components/patients/PatientFormModal.js';
-import { AppointmentModal } from '../components/appointments/AppointmentModal.js';
-import { Button } from '../components/ui/Button.js';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.js';
-import { Badge } from '../components/ui/Badge.js';
-import { formatDate } from '../lib/utils.js';
+import { useAuth } from '../context/AuthContext';
+import { DashboardData, Appointment, Patient } from '../types/index';
+import { api } from '../lib/api';
+import { Header } from '../components/layout/Header';
+import { MetricCards } from '../components/dashboard/MetricCards';
+import { UpcomingAppointments } from '../components/dashboard/UpcomingAppointments';
+import { PatientFormModal } from '../components/patients/PatientFormModal';
+import { AppointmentModal } from '../components/appointments/AppointmentModal';
+import { Button } from '../components/ui/Button';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { formatDate } from '../lib/utils';
 import { UserPlus, CalendarPlus, FileText, ArrowRight, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -26,29 +26,62 @@ export const DashboardPage: React.FC = () => {
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = React.useCallback(async (silent: boolean = false) => {
+    if (!silent) setLoading(true);
     try {
       const [dashRes, patientsRes] = await Promise.all([
-        api.get<{ success: boolean; data: DashboardData }>('/dashboard'),
+        api.get<{ success: boolean; data: any }>('/dashboard'),
         api.get<{ success: boolean; data: Patient[] }>('/patients?limit=100'),
       ]);
-      setDashboardData(dashRes.data);
-      setPatients(patientsRes.data);
+      if (dashRes && dashRes.data) {
+        setDashboardData(dashRes.data);
+      }
+      if (patientsRes && patientsRes.data) {
+        setPatients(patientsRes.data);
+      }
     } catch (error) {
       console.error('Error al cargar datos del dashboard:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    fetchDashboardData(false);
+
+    const interval = setInterval(() => {
+      fetchDashboardData(true);
+    }, 6000);
+
+    const handleFocus = () => {
+      fetchDashboardData(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [fetchDashboardData]);
 
   const handleOpenAppointmentModal = (appointment?: Appointment) => {
     setSelectedAppointment(appointment || null);
     setIsAppointmentModalOpen(true);
   };
+
+  const metrics = dashboardData?.metrics || {
+    totalPatients: patients.length,
+    activePatients: patients.filter((p) => p.isActive).length,
+    todayAppointmentsCount: 0,
+    monthCompletedAppointments: 0,
+  };
+
+  const todayAppointments = dashboardData?.todayAppointments || [];
+  const upcomingAppointments = dashboardData?.upcomingAppointments || [];
+  const recentNotes = (dashboardData as any)?.recentNotes || (dashboardData as any)?.recentClinicalNotes || [];
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -82,15 +115,15 @@ export const DashboardPage: React.FC = () => {
             <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-xs text-slate-500 mt-2 font-medium">Cargando métricas...</p>
           </div>
-        ) : dashboardData ? (
+        ) : (
           <>
             {/* Metric Cards */}
-            <MetricCards metrics={dashboardData.metrics} />
+            <MetricCards metrics={metrics} />
 
             {/* Upcoming Appointments & Today Schedule */}
             <UpcomingAppointments
-              todayAppointments={dashboardData.todayAppointments}
-              upcomingAppointments={dashboardData.upcomingAppointments}
+              todayAppointments={todayAppointments}
+              upcomingAppointments={upcomingAppointments}
               onOpenAppointmentModal={handleOpenAppointmentModal}
             />
 
@@ -116,13 +149,13 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-0 divide-y divide-slate-100">
-                {dashboardData.recentNotes.length === 0 ? (
+                {recentNotes.length === 0 ? (
                   <div className="p-8 text-center">
                     <p className="text-sm text-slate-500 font-medium">No hay notas de evolución recientes</p>
                     <p className="text-xs text-slate-400 mt-1">Crea notas desde la ficha de cada paciente.</p>
                   </div>
                 ) : (
-                  dashboardData.recentNotes.map((note) => (
+                  recentNotes.map((note: any) => (
                     <div
                       key={note.id}
                       className="p-5 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -133,7 +166,7 @@ export const DashboardPage: React.FC = () => {
                             to={`/patients/${note.patientId}`}
                             className="text-sm font-bold text-slate-900 hover:text-teal-600 transition-colors"
                           >
-                            {note.patient?.fullName}
+                            {note.patient?.fullName || 'Paciente'}
                           </Link>
                           <Badge variant="primary" size="sm">
                             Sesión #{note.sessionNumber || '1'}
@@ -165,7 +198,7 @@ export const DashboardPage: React.FC = () => {
               </CardContent>
             </Card>
           </>
-        ) : null}
+        )}
       </div>
 
       {/* Modales */}

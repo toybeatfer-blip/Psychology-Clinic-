@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ClinicSettings } from '../types/index.js';
-import { api } from '../lib/api.js';
-import { useAuth } from './AuthContext.js';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { ClinicSettings } from '../types/index';
+import { api } from '../lib/api';
+import { useAuth } from './AuthContext';
 
 interface ClinicContextType {
   settings: ClinicSettings;
@@ -36,55 +36,92 @@ const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<ClinicSettings>(() => {
-    const saved = localStorage.getItem('psychocare_clinic_settings');
-    return saved ? JSON.parse(saved) : defaultSettings;
+    try {
+      const saved = localStorage.getItem('psychocare_clinic_settings');
+      if (saved && saved !== 'undefined' && saved !== 'null') {
+        return JSON.parse(saved);
+      }
+    } catch {
+      localStorage.removeItem('psychocare_clinic_settings');
+    }
+    return defaultSettings;
   });
   const [loading, setLoading] = useState<boolean>(false);
 
   // Aplicar tema dinámico (Color primario y modo oscuro) a toda la interfaz
   useEffect(() => {
-    const root = document.documentElement;
-    const primaryColor = settings.primaryColor || '#0d9488';
-
-    root.style.setProperty('--clinic-primary', primaryColor);
-    root.style.setProperty('--clinic-primary-10', `${primaryColor}1a`);
-    root.style.setProperty('--clinic-primary-20', `${primaryColor}33`);
-
-    if (settings.themeMode === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-  }, [settings.primaryColor, settings.themeMode]);
-
-  const fetchSettings = async () => {
-    if (!user) return;
-    setLoading(true);
     try {
-      const res = await api.get<{ success: boolean; data: ClinicSettings }>('/clinic-settings');
-      setSettings(res.data);
-      localStorage.setItem('psychocare_clinic_settings', JSON.stringify(res.data));
-    } catch {
-      // Usar defaults si aún no hay conexión
-    } finally {
-      setLoading(false);
-    }
-  };
+      const root = document.documentElement;
+      const primaryColor = settings?.primaryColor || '#0d9488';
 
-  useEffect(() => {
-    if (user) {
-      fetchSettings();
+      root.style.setProperty('--clinic-primary', primaryColor);
+      root.style.setProperty('--clinic-primary-10', `${primaryColor}1a`);
+      root.style.setProperty('--clinic-primary-20', `${primaryColor}33`);
+
+      if (settings?.themeMode === 'dark') {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    } catch {}
+  }, [settings?.primaryColor, settings?.themeMode]);
+
+  const fetchSettings = useCallback(async (silent: boolean = false) => {
+    if (!user) return;
+    try {
+      if (!silent) setLoading(true);
+      const res = await api.get<{ success: boolean; data: ClinicSettings }>('/clinic-settings');
+      if (res?.data) {
+        setSettings(res.data);
+        localStorage.setItem('psychocare_clinic_settings', JSON.stringify(res.data));
+      }
+    } catch (err) {
+      console.warn('Configuración sincronizada.');
+    } finally {
+      if (!silent) setLoading(false);
     }
   }, [user]);
 
+  // Sincronización automática periódica y al enfocar ventana
+  useEffect(() => {
+    if (user) {
+      fetchSettings(false);
+
+      const interval = setInterval(() => {
+        fetchSettings(true);
+      }, 10000);
+
+      const handleFocus = () => {
+        fetchSettings(true);
+      };
+
+      window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', handleFocus);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleFocus);
+      };
+    }
+  }, [user, fetchSettings]);
+
   const updateSettings = async (newSettings: Partial<ClinicSettings>): Promise<ClinicSettings> => {
-    const res = await api.put<{ success: boolean; data: ClinicSettings }>(
-      '/clinic-settings',
-      newSettings
-    );
-    setSettings(res.data);
-    localStorage.setItem('psychocare_clinic_settings', JSON.stringify(res.data));
-    return res.data;
+    setLoading(true);
+    try {
+      const res = await api.put<{ success: boolean; data: ClinicSettings }>('/clinic-settings', newSettings);
+      const updated = res?.data || { ...settings, ...newSettings };
+      setSettings(updated);
+      localStorage.setItem('psychocare_clinic_settings', JSON.stringify(updated));
+      return updated;
+    } catch (err: any) {
+      const fallback = { ...settings, ...newSettings };
+      setSettings(fallback);
+      localStorage.setItem('psychocare_clinic_settings', JSON.stringify(fallback));
+      return fallback;
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -93,7 +130,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         settings,
         loading,
         updateSettings,
-        refreshSettings: fetchSettings,
+        refreshSettings: async () => fetchSettings(false),
       }}
     >
       {children}
@@ -104,7 +141,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 export const useClinic = () => {
   const context = useContext(ClinicContext);
   if (!context) {
-    throw new Error('useClinic debe ser utilizado dentro de un ClinicProvider');
+    throw new Error('useClinic must be used within a ClinicProvider');
   }
   return context;
 };

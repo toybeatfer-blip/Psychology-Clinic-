@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Appointment, Patient, AppointmentModality, AppointmentStatus } from '../../types/index.js';
-import { Modal } from '../ui/Modal.js';
-import { Input } from '../ui/Input.js';
-import { Select } from '../ui/Select.js';
-import { Textarea } from '../ui/Textarea.js';
-import { Button } from '../ui/Button.js';
-import { api } from '../../lib/api.js';
-import { Trash2, ExternalLink } from 'lucide-react';
+import { Appointment, Patient, AppointmentModality, AppointmentStatus, PaymentMethod } from '../../types/index';
+import { Modal } from '../ui/Modal';
+import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
+import { Textarea } from '../ui/Textarea';
+import { Button } from '../ui/Button';
+import { api } from '../../lib/api';
+import { Trash2, ExternalLink, Video, CheckCircle2, MessageSquare, Receipt } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { openWhatsAppReminder } from '../../lib/whatsapp';
 
 interface AppointmentModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     endTime: '11:00',
     modality: 'IN_PERSON' as AppointmentModality,
     status: 'SCHEDULED' as AppointmentStatus,
+    paymentMethod: 'TRANSFER' as PaymentMethod,
     meetingUrl: '',
     locationNotes: '',
     notes: '',
@@ -42,6 +44,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     isPaid: false,
   });
 
+  const selectedPatient = patients.find((p) => p.id === formData.patientId) || appointmentToEdit?.patient;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +60,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
         endTime: `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`,
         modality: appointmentToEdit.modality,
         status: appointmentToEdit.status,
+        paymentMethod: (appointmentToEdit.paymentMethod as PaymentMethod) || 'TRANSFER',
         meetingUrl: appointmentToEdit.meetingUrl || '',
         locationNotes: appointmentToEdit.locationNotes || '',
         notes: appointmentToEdit.notes || '',
@@ -72,6 +76,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
         endTime: '11:00',
         modality: 'IN_PERSON',
         status: 'SCHEDULED',
+        paymentMethod: 'TRANSFER',
         meetingUrl: '',
         locationNotes: 'Consultorio Principal',
         notes: '',
@@ -90,6 +95,12 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     }));
   };
 
+  const handleGenerateMeeting = () => {
+    const randomRoom = `psychocare-${Math.random().toString(36).substring(2, 9)}`;
+    const jitsiUrl = `https://meet.jit.si/${randomRoom}`;
+    setFormData((prev) => ({ ...prev, meetingUrl: jitsiUrl }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -105,11 +116,13 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
         endDateTime,
         modality: formData.modality,
         status: formData.status,
-        meetingUrl: formData.meetingUrl || undefined,
-        locationNotes: formData.locationNotes || undefined,
-        notes: formData.notes || undefined,
+        meetingUrl: formData.meetingUrl || null,
+        locationNotes: formData.locationNotes || null,
+        notes: formData.notes || null,
         price: Number(formData.price),
         isPaid: formData.isPaid,
+        paymentStatus: formData.isPaid ? 'PAID' : 'PENDING',
+        paymentMethod: formData.paymentMethod,
       };
 
       if (appointmentToEdit) {
@@ -128,9 +141,9 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!appointmentToEdit || !window.confirm('¿Estás seguro de que deseas eliminar esta cita?')) {
-      return;
-    }
+    if (!appointmentToEdit) return;
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta cita?')) return;
+
     setLoading(true);
     try {
       await api.delete(`/appointments/${appointmentToEdit.id}`);
@@ -148,7 +161,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={appointmentToEdit ? 'Gestionar Cita Psicológica' : 'Agendar Nueva Cita'}
-      description="Establece el horario, modalidad y estado de la sesión terapéutica."
+      description="Establece el horario, modalidad, enlace de teleconsulta y estado de cobro."
       maxWidth="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -218,7 +231,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
             onChange={handleChange}
             options={[
               { value: 'IN_PERSON', label: '🏢 Presencial (Consultorio)' },
-              { value: 'ONLINE', label: '💻 En Línea (Virtual)' },
+              { value: 'ONLINE', label: '💻 En Línea (Teleconsulta)' },
               { value: 'HOME_VISIT', label: '🚗 Domiciliaria' },
             ]}
           />
@@ -238,15 +251,43 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
           />
         </div>
 
+        {/* Teleconsulta / Videollamada */}
         {formData.modality === 'ONLINE' ? (
-          <Input
-            label="Enlace de la Videollamada (Zoom / Google Meet)"
-            type="url"
-            name="meetingUrl"
-            placeholder="https://meet.google.com/xyz..."
-            value={formData.meetingUrl}
-            onChange={handleChange}
-          />
+          <div className="space-y-1.5 p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                <Video className="w-4 h-4 text-indigo-600" />
+                <span>Enlace de Teleconsulta (Google Meet / Zoom / Jitsi)</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleGenerateMeeting}
+                className="text-[11px] text-indigo-700 hover:text-indigo-800 font-bold underline cursor-pointer"
+              >
+                Generar Sala Segura
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="url"
+                name="meetingUrl"
+                placeholder="https://meet.google.com/xyz... o https://meet.jit.si/..."
+                value={formData.meetingUrl}
+                onChange={handleChange}
+              />
+              {formData.meetingUrl && (
+                <a
+                  href={formData.meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shrink-0 transition-colors shadow-xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Iniciar</span>
+                </a>
+              )}
+            </div>
+          </div>
         ) : (
           <Input
             label="Ubicación / Sala"
@@ -257,8 +298,8 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
           />
         )}
 
-        {/* Notas y Precio */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Honorarios y Cobranza */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input
             label="Honorarios ($)"
             type="number"
@@ -268,16 +309,31 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
             value={formData.price}
             onChange={handleChange}
           />
-          <div className="flex items-center gap-2 pt-7">
+
+          <Select
+            label="Método de Pago"
+            name="paymentMethod"
+            value={formData.paymentMethod}
+            onChange={handleChange}
+            options={[
+              { value: 'TRANSFER', label: '💳 Transferencia / SPEI' },
+              { value: 'CASH', label: '💵 Efectivo' },
+              { value: 'CARD', label: '💳 Tarjeta Débito/Crédito' },
+              { value: 'INSURANCE', label: '🛡️ Seguro Médico' },
+              { value: 'OTHER', label: 'Otro' },
+            ]}
+          />
+
+          <div className="flex items-center gap-2 pt-6">
             <input
               type="checkbox"
               id="isPaid"
               name="isPaid"
               checked={formData.isPaid}
               onChange={handleChange}
-              className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300"
+              className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300 cursor-pointer"
             />
-            <label htmlFor="isPaid" className="text-sm font-medium text-slate-700 cursor-pointer">
+            <label htmlFor="isPaid" className="text-xs font-bold text-slate-700 cursor-pointer">
               ¿Honorarios Pagados?
             </label>
           </div>
@@ -287,44 +343,48 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
           label="Notas previas o recordatorios"
           name="notes"
           rows={2}
-          placeholder="Ej. Revisar tareas de respiración diafragmática al inicio."
+          placeholder="Temas pendientes a revisar o acuerdos de la sesión anterior..."
           value={formData.notes}
           onChange={handleChange}
         />
 
-        {/* Botones de acción */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-          <div>
-            {appointmentToEdit && (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="danger"
-                  size="sm"
-                  onClick={handleDelete}
-                  leftIcon={<Trash2 className="w-4 h-4" />}
-                >
-                  Eliminar
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => navigate(`/patients/${appointmentToEdit.patientId}`)}
-                  leftIcon={<ExternalLink className="w-4 h-4" />}
-                >
-                  Expediente
-                </Button>
-              </div>
-            )}
-          </div>
+        {/* Acciones del Modal */}
+        <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+          {appointmentToEdit ? (
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={handleDelete}
+                isLoading={loading}
+                leftIcon={<Trash2 className="w-4 h-4" />}
+              >
+                Eliminar
+              </Button>
 
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cerrar
+              {selectedPatient && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openWhatsAppReminder(selectedPatient, appointmentToEdit)}
+                  leftIcon={<MessageSquare className="w-4 h-4 text-emerald-600" />}
+                >
+                  WhatsApp
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+              Cancelar
             </Button>
-            <Button type="submit" isLoading={loading}>
-              {appointmentToEdit ? 'Actualizar Cita' : 'Crear Cita'}
+            <Button type="submit" variant="primary" size="sm" isLoading={loading}>
+              {appointmentToEdit ? 'Guardar Cambios' : 'Crear Cita'}
             </Button>
           </div>
         </div>

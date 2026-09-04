@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext.js';
-import { User } from '../types/index.js';
-import { api } from '../lib/api.js';
-import { Header } from '../components/layout/Header.js';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.js';
-import { Input } from '../components/ui/Input.js';
-import { Textarea } from '../components/ui/Textarea.js';
-import { Button } from '../components/ui/Button.js';
+import { useAuth } from '../context/AuthContext';
+import { User } from '../types/index';
+import { api } from '../lib/api';
+import { Header } from '../components/layout/Header';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
+import { Textarea } from '../components/ui/Textarea';
+import { Button } from '../components/ui/Button';
 import {
   Award,
   Phone,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Users, CalendarCheck, FileText, CheckCircle2 } from 'lucide-react';
-import { Card, CardContent } from '../ui/Card.js';
+import { Card, CardContent } from '../ui/Card';
 
 interface MetricCardsProps {
   metrics: {

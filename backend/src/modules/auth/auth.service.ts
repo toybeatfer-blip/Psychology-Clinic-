@@ -4,8 +4,13 @@ import { generateToken } from '../../utils/jwt.js';
 import { RegisterInput, LoginInput } from './auth.schemas.js';
 
 export async function registerTherapist(data: RegisterInput) {
-  const existingUser = await prisma.user.findUnique({
-    where: { email: data.email.toLowerCase() },
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: data.email },
+        { email: data.email.toLowerCase() },
+      ],
+    },
   });
 
   if (existingUser) {
@@ -22,14 +27,29 @@ export async function registerTherapist(data: RegisterInput) {
       role: 'THERAPIST',
       profile: {
         create: {
-          professionalId: data.professionalId,
-          specialty: data.specialty,
-          phone: data.phone,
+          professionalId: data.professionalId || '',
+          specialty: data.specialty || 'Psicología Clínica',
+          phone: data.phone || '',
+          hourlyRate: 50,
+          currency: 'USD',
+        },
+      },
+      clinicSettings: {
+        create: {
+          clinicName: `Consultorio ${data.fullName}`,
+          tagline: 'Centro de Psicoterapia y Bienestar Emocional',
+          primaryColor: '#0d9488',
+          secondaryColor: '#0f766e',
+          themeMode: 'light',
+          sidebarStyle: 'dark',
+          phone: data.phone || '',
+          email: data.email.toLowerCase(),
         },
       },
     },
     include: {
       profile: true,
+      clinicSettings: true,
     },
   });
 
@@ -53,10 +73,18 @@ export async function registerTherapist(data: RegisterInput) {
 }
 
 export async function loginTherapist(data: LoginInput) {
-  const user = await prisma.user.findUnique({
-    where: { email: data.email.toLowerCase() },
+  const inputEmail = data.email.trim();
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: inputEmail },
+        { email: inputEmail.toLowerCase() },
+        { email: inputEmail.toUpperCase() },
+      ],
+    },
     include: {
       profile: true,
+      clinicSettings: true,
     },
   });
 
@@ -98,6 +126,7 @@ export async function getMe(userId: string) {
       role: true,
       createdAt: true,
       profile: true,
+      clinicSettings: true,
     },
   });
 

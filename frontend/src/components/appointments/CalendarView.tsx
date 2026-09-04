@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Appointment } from '../../types/index.js';
+import { Appointment } from '../../types/index';
 import {
   format,
   startOfMonth,
@@ -26,9 +26,9 @@ import {
   Clock,
   User,
 } from 'lucide-react';
-import { Button } from '../ui/Button.js';
-import { Badge } from '../ui/Badge.js';
-import { cn, formatTime } from '../../lib/utils.js';
+import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { cn, formatTime } from '../../lib/utils';
 
 interface CalendarViewProps {
   appointments: Appointment[];

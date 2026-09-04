@@ -1,17 +1,18 @@
 import React from 'react';
-import { Patient } from '../../types/index.js';
-import { Card, CardContent } from '../ui/Card.js';
-import { Badge } from '../ui/Badge.js';
-import { calculateAge } from '../../lib/utils.js';
-import { Phone, Mail, Calendar, FileText, ChevronRight, Edit3 } from 'lucide-react';
+import { Patient } from '../../types/index';
+import { Card, CardContent } from '../ui/Card';
+import { Badge } from '../ui/Badge';
+import { calculateAge } from '../../lib/utils';
+import { Phone, Mail, Calendar, FileText, ChevronRight, Edit3, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface PatientCardProps {
   patient: Patient;
   onEdit: (patient: Patient) => void;
+  onDelete?: (patient: Patient) => void;
 }
 
-export const PatientCard: React.FC<PatientCardProps> = ({ patient, onEdit }) => {
+export const PatientCard: React.FC<PatientCardProps> = ({ patient, onEdit, onDelete }) => {
   return (
     <Card className="hover:shadow-md hover:border-teal-200 transition-all flex flex-col justify-between group">
       <CardContent className="p-5">
@@ -40,7 +41,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onEdit }) => 
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <Badge variant={patient.isActive ? 'success' : 'neutral'} size="sm">
               {patient.isActive ? 'Activo' : 'Inactivo'}
             </Badge>
@@ -51,6 +52,15 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onEdit }) => 
             >
               <Edit3 className="w-3.5 h-3.5" />
             </button>
+            {onDelete && (
+              <button
+                onClick={() => onDelete(patient)}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                title="Eliminar paciente"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 

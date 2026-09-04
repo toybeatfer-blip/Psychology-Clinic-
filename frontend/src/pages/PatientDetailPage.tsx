@@ -1,18 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Patient, ClinicalNote, Attachment, Appointment } from '../types/index.js';
-import { api } from '../lib/api.js';
-import { Header } from '../components/layout/Header.js';
-import { Tabs } from '../components/ui/Tabs.js';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card.js';
-import { Badge } from '../components/ui/Badge.js';
-import { Button } from '../components/ui/Button.js';
-import { SessionNoteTimeline } from '../components/clinical-records/SessionNoteTimeline.js';
-import { SessionNoteModal } from '../components/clinical-records/SessionNoteModal.js';
-import { AttachmentModal } from '../components/clinical-records/AttachmentModal.js';
-import { PatientFormModal } from '../components/patients/PatientFormModal.js';
-import { AppointmentModal } from '../components/appointments/AppointmentModal.js';
-import { calculateAge, formatDate, formatTime, formatFileSize } from '../lib/utils.js';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import {
+  Patient,
+  ClinicalNote,
+  Attachment,
+  Appointment,
+  InformedConsent,
+  PsychometricTest,
+  ClinicalEvaluation,
+} from '../types/index';
+import { api } from '../lib/api';
+import { Header } from '../components/layout/Header';
+import { Tabs } from '../components/ui/Tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { SessionNoteTimeline } from '../components/clinical-records/SessionNoteTimeline';
+import { SessionNoteModal } from '../components/clinical-records/SessionNoteModal';
+import { AttachmentModal } from '../components/clinical-records/AttachmentModal';
+import { PatientFormModal } from '../components/patients/PatientFormModal';
+import { AppointmentModal } from '../components/appointments/AppointmentModal';
+import { ConsentModal } from '../components/clinical-records/ConsentModal';
+import { PsychometricTestModal } from '../components/clinical-records/PsychometricTestModal';
+import { PsychometricTestsTab } from '../components/clinical-records/PsychometricTestsTab';
+import { ClinicalEvaluationTab } from '../components/patients/ClinicalEvaluationTab';
+import { PatientPaymentsTab } from '../components/patients/PatientPaymentsTab';
+import { calculateAge, formatDate, formatTime, formatFileSize } from '../lib/utils';
 import {
   ArrowLeft,
   Plus,
@@ -29,14 +42,22 @@ import {
   Trash2,
   Edit3,
   Download,
+  Brain,
+  BrainCircuit,
+  ShieldCheck,
+  CreditCard,
+  Video,
+  PenTool,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const PatientDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('notes'); // notes, info, appointments, attachments
+  const [activeTab, setActiveTab] = useState('notes');
 
   // Modals state
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -45,6 +66,8 @@ export const PatientDetailPage: React.FC = () => {
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
 
   const fetchPatientDetail = async () => {
     if (!id) return;
@@ -92,6 +115,30 @@ export const PatientDetailPage: React.FC = () => {
     }
   };
 
+  const handleSaveConsent = async (consent: InformedConsent) => {
+    if (!id) return;
+    await api.post(`/patients/${id}/consent`, consent);
+    fetchPatientDetail();
+  };
+
+  const handleSaveTest = async (test: PsychometricTest) => {
+    if (!id) return;
+    await api.post(`/patients/${id}/psychometric-tests`, test);
+    fetchPatientDetail();
+  };
+
+  const handleDeleteTest = async (testId: string) => {
+    if (!window.confirm('¿Deseas eliminar esta evaluación psicométrica?')) return;
+    await api.delete(`/psychometric-tests/${testId}`);
+    fetchPatientDetail();
+  };
+
+  const handleSaveEvaluation = async (evaluation: ClinicalEvaluation) => {
+    if (!id) return;
+    await api.post(`/patients/${id}/clinical-evaluation`, evaluation);
+    fetchPatientDetail();
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[500px]">
@@ -126,9 +173,26 @@ export const PatientDetailPage: React.FC = () => {
       badge: patient.clinicalNotes?.length || 0,
     },
     {
-      id: 'info',
-      label: 'Ficha & Antecedentes',
-      icon: <User className="w-4 h-4" />,
+      id: 'evaluation',
+      label: 'Anamnesis & DSM-5',
+      icon: <Brain className="w-4 h-4" />,
+    },
+    {
+      id: 'tests',
+      label: 'Tests Psicométricos',
+      icon: <BrainCircuit className="w-4 h-4" />,
+      badge: patient.psychometricTests?.length || 0,
+    },
+    {
+      id: 'consent',
+      label: 'Consentimiento & Firma',
+      icon: <ShieldCheck className="w-4 h-4" />,
+      badge: patient.consent?.status === 'SIGNED' ? '✓' : undefined,
+    },
+    {
+      id: 'payments',
+      label: 'Pagos & Recibos',
+      icon: <CreditCard className="w-4 h-4" />,
     },
     {
       id: 'appointments',
@@ -138,25 +202,31 @@ export const PatientDetailPage: React.FC = () => {
     },
     {
       id: 'attachments',
-      label: 'Documentos & Tests',
+      label: 'Documentos',
       icon: <Paperclip className="w-4 h-4" />,
       badge: patient.attachments?.length || 0,
+    },
+    {
+      id: 'info',
+      label: 'Ficha General',
+      icon: <User className="w-4 h-4" />,
     },
   ];
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
       <Header
-        title={`Expediente: ${patient.fullName}`}
-        subtitle="Historial clínico confidencial y evolución psicoterapéutica"
+        title={patient.fullName}
+        subtitle="Expediente Psicológico Integral y Confidencial"
         actions={
           <div className="flex items-center gap-2">
             <Link to="/patients">
               <Button variant="outline" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />}>
-                Pacientes
+                Volver
               </Button>
             </Link>
             <Button
+              variant="primary"
               size="sm"
               onClick={handleCreateNote}
               leftIcon={<Plus className="w-4 h-4" />}
@@ -167,11 +237,11 @@ export const PatientDetailPage: React.FC = () => {
         }
       />
 
-      <div className="p-8 space-y-6 max-w-7xl mx-auto w-full">
-        {/* Banner Resumen del Paciente */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="p-4 sm:p-8 max-w-7xl mx-auto w-full space-y-6">
+        {/* Tarjeta Resumen del Paciente */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-teal-600 text-white font-bold text-2xl flex items-center justify-center shadow-sm flex-shrink-0">
+            <div className="w-16 h-16 rounded-2xl bg-teal-600 text-white font-bold text-2xl flex items-center justify-center shadow-xs shrink-0">
               {patient.fullName.charAt(0).toUpperCase()}
             </div>
             <div>
@@ -180,6 +250,11 @@ export const PatientDetailPage: React.FC = () => {
                 <Badge variant={patient.isActive ? 'success' : 'neutral'}>
                   {patient.isActive ? 'Activo' : 'Inactivo'}
                 </Badge>
+                {patient.consent?.status === 'SIGNED' && (
+                  <Badge variant="success" size="sm">
+                    Consentimiento Firmado ✓
+                  </Badge>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 mt-1.5">
                 <span>{patient.occupation || 'Sin ocupación especificada'}</span>
@@ -199,7 +274,7 @@ export const PatientDetailPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 border-t lg:border-t-0 pt-4 lg:pt-0 border-slate-100">
+          <div className="flex items-center gap-2 border-t lg:border-t-0 pt-4 lg:pt-0 border-slate-100 w-full lg:w-auto justify-end">
             <Button
               variant="outline"
               size="sm"
@@ -247,7 +322,237 @@ export const PatientDetailPage: React.FC = () => {
           </div>
         )}
 
-        {/* Tab 2: Ficha y Antecedentes */}
+        {/* Tab 2: Anamnesis Inicial & Diagnóstico DSM-5 */}
+        {activeTab === 'evaluation' && (
+          <ClinicalEvaluationTab
+            patient={patient}
+            onSaveEvaluation={handleSaveEvaluation}
+          />
+        )}
+
+        {/* Tab 3: Batería Psicométrica */}
+        {activeTab === 'tests' && (
+          <PsychometricTestsTab
+            patient={patient}
+            onOpenTestModal={() => setIsTestModalOpen(true)}
+            onDeleteTest={handleDeleteTest}
+          />
+        )}
+
+        {/* Tab 4: Consentimiento Informado & Firma Digital */}
+        {activeTab === 'consent' && (
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-teal-600" />
+                  <span>Consentimiento Informado de Psicoterapia</span>
+                </CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Respaldo ético-legal con firma digital en pantalla
+                </p>
+              </div>
+
+              <Button
+                variant={patient.consent ? 'outline' : 'primary'}
+                size="sm"
+                onClick={() => setIsConsentModalOpen(true)}
+                leftIcon={patient.consent ? <FileCheck className="w-4 h-4" /> : <PenTool className="w-4 h-4" />}
+              >
+                {patient.consent ? 'Ver / Imprimir Consentimiento' : 'Firmar Consentimiento'}
+              </Button>
+            </CardHeader>
+
+            <CardContent className="p-6">
+              {patient.consent ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                      <div>
+                        <h4 className="text-sm font-bold text-emerald-900">Consentimiento Firmado y Válido</h4>
+                        <p className="text-xs text-emerald-700">
+                          Firmado el {formatDate(patient.consent.signedAt)} por{' '}
+                          {patient.consent.tutorName || patient.consent.patientName}
+                          {patient.consent.identificationNumber ? ` (ID: ${patient.consent.identificationNumber})` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsConsentModalOpen(true)}
+                    >
+                      Abrir Documento
+                    </Button>
+                  </div>
+
+                  <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Firma Registrada</p>
+                    <img
+                      src={patient.consent.signatureDataUrl}
+                      alt="Firma Manuscrita"
+                      className="max-h-24 object-contain"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-8 text-center space-y-3">
+                  <ShieldCheck className="w-12 h-12 text-slate-300 mx-auto" />
+                  <h4 className="text-sm font-bold text-slate-700">Sin Consentimiento Informado Firmado</h4>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    Es una buena práctica clínica y ético-legal recabar la firma del paciente o tutor antes de iniciar el tratamiento.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setIsConsentModalOpen(true)}
+                    leftIcon={<PenTool className="w-4 h-4" />}
+                  >
+                    Firmar en Pantalla Ahora
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tab 5: Pagos & Recibos de Honorarios */}
+        {activeTab === 'payments' && (
+          <PatientPaymentsTab patient={patient} />
+        )}
+
+        {/* Tab 6: Historial de Citas */}
+        {activeTab === 'appointments' && (
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-bold">Historial de Sesiones</CardTitle>
+                <p className="text-xs text-slate-500">Citas programadas, realizadas y teleconsultas</p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsAppointmentModalOpen(true)}
+                leftIcon={<Plus className="w-4 h-4" />}
+              >
+                Agendar Cita
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {(patient.appointments || []).length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  Sin citas agendadas para este paciente.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {(patient.appointments || []).map((appt) => (
+                    <div
+                      key={appt.id}
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800 text-sm">
+                            {appt.modality === 'ONLINE' ? '💻 Sesión Online' : '🏢 Presencial'}
+                          </span>
+                          <Badge
+                            variant={
+                              appt.status === 'COMPLETED'
+                                ? 'success'
+                                : appt.status === 'CONFIRMED'
+                                ? 'primary'
+                                : appt.status === 'CANCELLED'
+                                ? 'danger'
+                                : 'neutral'
+                            }
+                            size="sm"
+                          >
+                            {appt.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          📅 {formatDate(appt.startDateTime)} • ⏰ {formatTime(appt.startDateTime)} - {formatTime(appt.endDateTime)}
+                        </p>
+                        {appt.notes && <p className="text-xs text-slate-600 italic">"{appt.notes}"</p>}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {appt.meetingUrl && appt.modality === 'ONLINE' && (
+                          <a
+                            href={appt.meetingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                            <span>Iniciar Teleconsulta</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tab 7: Documentos y Adjuntos */}
+        {activeTab === 'attachments' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Documentos Clínicos y Archivos</h3>
+                <p className="text-xs text-slate-500">Pruebas, informes médicos y consentimientos en PDF</p>
+              </div>
+              <Button size="sm" onClick={() => setIsAttachmentModalOpen(true)} leftIcon={<Plus className="w-4 h-4" />}>
+                Subir Archivo
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {(patient.attachments || []).map((att) => (
+                <Card key={att.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                        <Paperclip className="w-5 h-5" />
+                      </div>
+                      <button
+                        onClick={() => handleDeleteAttachment(att.id)}
+                        className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-sm truncate" title={att.fileName}>
+                        {att.fileName}
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        {formatFileSize(att.fileSize)} • {formatDate(att.uploadedAt)}
+                      </p>
+                    </div>
+
+                    <a
+                      href={att.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full py-1.5 text-center text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors"
+                    >
+                      Descargar / Ver
+                    </a>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 8: Ficha General y Antecedentes */}
         {activeTab === 'info' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
@@ -269,7 +574,7 @@ export const PatientDetailPage: React.FC = () => {
                     Antecedentes Médicos / Psiquiátricos
                   </h5>
                   <p className="text-sm text-slate-700 leading-relaxed">
-                    {patient.clinicalBackground || 'Sin antecedentes médicos relevantes reportados.'}
+                    {patient.clinicalBackground || 'Sin antecedentes médicos reportados.'}
                   </p>
                 </div>
 
@@ -278,7 +583,7 @@ export const PatientDetailPage: React.FC = () => {
                     Medicación Actual
                   </h5>
                   <p className="text-sm text-slate-700 leading-relaxed">
-                    {patient.currentMedication || 'Ninguna medicación psicofarmacológica reportada.'}
+                    {patient.currentMedication || 'Sin medicación psicofarmacológica actual.'}
                   </p>
                 </div>
               </CardContent>
@@ -286,216 +591,87 @@ export const PatientDetailPage: React.FC = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Datos Demográficos y de Emergencia</CardTitle>
+                <CardTitle>Contacto de Emergencia & Datos</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-slate-400 block font-medium">Fecha de Nacimiento</span>
-                    <span className="font-bold text-slate-800">{formatDate(patient.birthDate)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block font-medium">Género</span>
-                    <span className="font-bold text-slate-800">{patient.gender || 'N/A'}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400 block font-medium">Dirección / Domicilio</span>
-                    <span className="font-bold text-slate-800">{patient.address || 'No registrado'}</span>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-100">
-                  <h5 className="text-xs font-bold uppercase tracking-wider text-rose-700 flex items-center gap-1.5 mb-2">
-                    <HeartHandshake className="w-3.5 h-3.5 text-rose-500" />
-                    Contacto en Caso de Emergencia
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+                  <h5 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Contacto de Emergencia Designado
                   </h5>
-                  <div className="bg-rose-50/50 p-3 rounded-xl border border-rose-100 space-y-1 text-xs">
-                    <p className="font-bold text-slate-900">{patient.emergencyName || 'No especificado'}</p>
-                    <p className="text-slate-600">
-                      Relación: <span className="font-semibold">{patient.emergencyRelation || 'N/A'}</span>
-                    </p>
-                    <p className="text-slate-600">
-                      Teléfono: <span className="font-semibold">{patient.emergencyPhone || 'N/A'}</span>
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Tab 3: Historial de Citas */}
-        {activeTab === 'appointments' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-800">Citas del Paciente</h3>
-              <Button
-                size="sm"
-                onClick={() => setIsAppointmentModalOpen(true)}
-                leftIcon={<Calendar className="w-4 h-4" />}
-              >
-                Agendar Nueva Cita
-              </Button>
-            </div>
-
-            <Card>
-              <CardContent className="p-0 divide-y divide-slate-100">
-                {!patient.appointments || patient.appointments.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-700">Sin historial de citas</p>
-                  </div>
-                ) : (
-                  patient.appointments.map((appt) => (
-                    <div key={appt.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
-                      <div>
-                        <span className="text-sm font-bold text-slate-800">
-                          {formatDate(appt.startDateTime)} a las {formatTime(appt.startDateTime)}
-                        </span>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Modalidad: {appt.modality === 'ONLINE' ? 'Virtual (Online)' : 'Presencial'}
-                          {appt.locationNotes && ` • ${appt.locationNotes}`}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={
-                          appt.status === 'COMPLETED'
-                            ? 'success'
-                            : appt.status === 'CONFIRMED'
-                            ? 'info'
-                            : appt.status === 'CANCELLED'
-                            ? 'danger'
-                            : 'primary'
-                        }
-                      >
-                        {appt.status}
-                      </Badge>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Tab 4: Documentos y Archivos Adjuntos */}
-        {activeTab === 'attachments' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">Documentos Clínicos & Tests</h3>
-                <p className="text-xs text-slate-500">
-                  Consentimientos informados, escalas psicológicas y evaluaciones psicométricas
-                </p>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => setIsAttachmentModalOpen(true)}
-                leftIcon={<Plus className="w-4 h-4" />}
-              >
-                Adjuntar Documento
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {!patient.attachments || patient.attachments.length === 0 ? (
-                <div className="col-span-full bg-white rounded-2xl border border-slate-200 p-12 text-center">
-                  <Paperclip className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <h4 className="text-base font-bold text-slate-800">Sin documentos adjuntos</h4>
-                  <p className="text-xs text-slate-500 mt-1 mb-4">
-                    Puedes adjuntar consentimientos informados en PDF, resultados de tests (Beck, Hamilton, etc.).
+                  <p className="text-sm font-bold text-slate-800">
+                    {patient.emergencyName || 'No especificado'}
                   </p>
-                  <Button size="sm" onClick={() => setIsAttachmentModalOpen(true)} leftIcon={<Plus className="w-4 h-4" />}>
-                    Subir Primer Documento
-                  </Button>
+                  <p className="text-xs text-slate-600">
+                    Tel: {patient.emergencyPhone || 'N/A'} • Relación: {patient.emergencyRelation || 'N/A'}
+                  </p>
                 </div>
-              ) : (
-                patient.attachments.map((file) => (
-                  <Card key={file.id} className="hover:border-teal-300 transition-all flex flex-col justify-between">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-xs flex-shrink-0 border border-rose-100">
-                          PDF
-                        </div>
-                        <Badge variant="secondary" size="sm">
-                          {file.type === 'CONSENT_FORM'
-                            ? 'Consentimiento'
-                            : file.type === 'PSYCHOMETRIC_TEST'
-                            ? 'Test Psicométrico'
-                            : file.type === 'MEDICAL_REPORT'
-                            ? 'Informe Médico'
-                            : 'Documento'}
-                        </Badge>
-                      </div>
 
-                      <h5 className="font-bold text-sm text-slate-800 line-clamp-1" title={file.fileName}>
-                        {file.fileName}
-                      </h5>
-                      {file.description && (
-                        <p className="text-xs text-slate-500 line-clamp-2 mt-1">{file.description}</p>
-                      )}
-
-                      <p className="text-[11px] text-slate-400 mt-2">
-                        {formatDate(file.uploadedAt)} • {formatFileSize(file.fileSize)}
-                      </p>
-                    </CardContent>
-
-                    <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                      <a
-                        href={file.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs font-bold text-teal-600 hover:text-teal-700 inline-flex items-center gap-1"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" /> Ver PDF
-                      </a>
-
-                      <button
-                        onClick={() => handleDeleteAttachment(file.id)}
-                        className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors"
-                        title="Eliminar archivo"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </Card>
-                ))
-              )}
-            </div>
+                <div className="text-xs text-slate-500 space-y-1 pt-2">
+                  <p>📍 Dirección: {patient.address || 'No registrada'}</p>
+                  <p>📅 Registrado en el sistema: {formatDate(patient.createdAt)}</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
 
       {/* Modales */}
-      <SessionNoteModal
-        isOpen={isNoteModalOpen}
-        onClose={() => setIsNoteModalOpen(false)}
-        patientId={patient.id}
-        noteToEdit={noteToEdit}
-        appointments={patient.appointments || []}
-        onSuccess={() => fetchPatientDetail()}
-      />
+      {isNoteModalOpen && (
+        <SessionNoteModal
+          isOpen={isNoteModalOpen}
+          onClose={() => setIsNoteModalOpen(false)}
+          patientId={patient.id}
+          noteToEdit={noteToEdit}
+          onSuccess={fetchPatientDetail}
+        />
+      )}
 
-      <AttachmentModal
-        isOpen={isAttachmentModalOpen}
-        onClose={() => setIsAttachmentModalOpen(false)}
-        patientId={patient.id}
-        onSuccess={() => fetchPatientDetail()}
-      />
+      {isPatientModalOpen && (
+        <PatientFormModal
+          isOpen={isPatientModalOpen}
+          onClose={() => setIsPatientModalOpen(false)}
+          patientToEdit={patient}
+          onSuccess={fetchPatientDetail}
+        />
+      )}
 
-      <PatientFormModal
-        isOpen={isPatientModalOpen}
-        onClose={() => setIsPatientModalOpen(false)}
-        patientToEdit={patient}
-        onSuccess={() => fetchPatientDetail()}
-      />
+      {isAppointmentModalOpen && (
+        <AppointmentModal
+          isOpen={isAppointmentModalOpen}
+          onClose={() => setIsAppointmentModalOpen(false)}
+          patients={[patient]}
+          onSuccess={fetchPatientDetail}
+        />
+      )}
 
-      <AppointmentModal
-        isOpen={isAppointmentModalOpen}
-        onClose={() => setIsAppointmentModalOpen(false)}
-        patients={[patient]}
-        onSuccess={() => fetchPatientDetail()}
-      />
+      {isAttachmentModalOpen && (
+        <AttachmentModal
+          isOpen={isAttachmentModalOpen}
+          onClose={() => setIsAttachmentModalOpen(false)}
+          patientId={patient.id}
+          onSuccess={fetchPatientDetail}
+        />
+      )}
+
+      {isConsentModalOpen && (
+        <ConsentModal
+          isOpen={isConsentModalOpen}
+          onClose={() => setIsConsentModalOpen(false)}
+          patient={patient}
+          onSaveConsent={handleSaveConsent}
+        />
+      )}
+
+      {isTestModalOpen && (
+        <PsychometricTestModal
+          isOpen={isTestModalOpen}
+          onClose={() => setIsTestModalOpen(false)}
+          patientId={patient.id}
+          patientName={patient.fullName}
+          onSaveTest={handleSaveTest}
+        />
+      )}
     </div>
   );
 };

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Attachment, AttachmentType } from '../../types/index.js';
-import { Modal } from '../ui/Modal.js';
-import { Input } from '../ui/Input.js';
-import { Select } from '../ui/Select.js';
-import { Textarea } from '../ui/Textarea.js';
-import { Button } from '../ui/Button.js';
-import { api } from '../../lib/api.js';
+import { Attachment, AttachmentType } from '../../types/index';
+import { Modal } from '../ui/Modal';
+import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
+import { Textarea } from '../ui/Textarea';
+import { Button } from '../ui/Button';
+import { api } from '../../lib/api';
 import { UploadCloud } from 'lucide-react';
 
 interface AttachmentModalProps {

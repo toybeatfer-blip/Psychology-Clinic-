@@ -1,5 +1,7 @@
 import express, { Express } from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
 import { ENV } from './config/env.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 
@@ -12,6 +14,8 @@ import clinicalNotesRoutes, { patientNotesRouter } from './modules/clinical-note
 import attachmentsRoutes, { patientAttachmentsRouter } from './modules/attachments/attachments.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import clinicSettingsRoutes from './modules/clinic-settings/clinic-settings.routes.js';
+import adminRoutes from './modules/admin/admin.routes.js';
+import cloudSyncRoutes from './modules/cloud-sync/cloud-sync.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -19,8 +23,13 @@ export function createApp(): Express {
   // Middlewares globales
   app.use(
     cors({
-      origin: [ENV.CORS_ORIGIN, 'http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+      origin: (origin, callback) => {
+        // Permitir peticiones desde cualquier origen (Render, localhost, dominios personalizados)
+        callback(null, true);
+      },
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
     })
   );
   app.use(express.json({ limit: '10mb' }));
@@ -42,6 +51,29 @@ export function createApp(): Express {
   app.use('/api/clinical-notes', clinicalNotesRoutes);
   app.use('/api/attachments', attachmentsRoutes);
   app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/admin', adminRoutes);
+  app.use('/api/cloud-sync', cloudSyncRoutes);
+
+  // Servir frontend compilado en producción si existe
+  const possiblePaths = [
+    path.resolve(process.cwd(), '../frontend/dist'),
+    path.resolve(process.cwd(), 'dist/public'),
+    path.resolve(process.cwd(), 'public'),
+    path.resolve(__dirname, '../../frontend/dist'),
+  ];
+
+  for (const staticPath of possiblePaths) {
+    if (fs.existsSync(staticPath)) {
+      app.use(express.static(staticPath));
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+          return next();
+        }
+        res.sendFile(path.join(staticPath, 'index.html'));
+      });
+      break;
+    }
+  }
 
   // Manejador global de errores
   app.use(errorHandler);

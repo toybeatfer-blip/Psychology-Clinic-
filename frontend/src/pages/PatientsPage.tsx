@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Patient } from '../types/index.js';
-import { api } from '../lib/api.js';
-import { Header } from '../components/layout/Header.js';
-import { PatientCard } from '../components/patients/PatientCard.js';
-import { PatientFormModal } from '../components/patients/PatientFormModal.js';
-import { Button } from '../components/ui/Button.js';
-import { Input } from '../components/ui/Input.js';
+import { Patient } from '../types/index';
+import { api } from '../lib/api';
+import { Header } from '../components/layout/Header';
+import { PatientCard } from '../components/patients/PatientCard';
+import { PatientFormModal } from '../components/patients/PatientFormModal';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { UserPlus, Search, Users, Filter } from 'lucide-react';
 
 export const PatientsPage: React.FC = () => {
@@ -17,7 +17,8 @@ export const PatientsPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [patientToEdit, setPatientToEdit] = useState<Patient | null>(null);
 
-  const fetchPatients = async () => {
+  const fetchPatients = React.useCallback(async (silent: boolean = false) => {
+    if (!silent) setLoading(true);
     try {
       let query = `/patients?limit=100`;
       if (search.trim() !== '') {
@@ -30,25 +31,53 @@ export const PatientsPage: React.FC = () => {
       }
 
       const res = await api.get<{ success: boolean; data: Patient[] }>(query);
-      setPatients(res.data);
+      setPatients(res.data || []);
     } catch (error) {
       console.error('Error al cargar pacientes:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, [search, filterActive]);
 
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
-      fetchPatients();
+      fetchPatients(false);
     }, 250);
 
-    return () => clearTimeout(delayDebounce);
-  }, [search, filterActive]);
+    const interval = setInterval(() => {
+      fetchPatients(true);
+    }, 6000);
+
+    const handleFocus = () => {
+      fetchPatients(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      clearTimeout(delayDebounce);
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [fetchPatients]);
 
   const handleEditPatient = (patient: Patient) => {
     setPatientToEdit(patient);
     setIsModalOpen(true);
+  };
+
+  const handleDeletePatient = async (patient: Patient) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar permanentemente a "${patient.fullName}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/patients/${patient.id}`);
+      fetchPatients();
+    } catch (error) {
+      alert('Error al eliminar paciente');
+    }
   };
 
   const handleNewPatient = () => {
@@ -142,7 +171,12 @@ export const PatientsPage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {patients.map((patient) => (
-              <PatientCard key={patient.id} patient={patient} onEdit={handleEditPatient} />
+              <PatientCard
+                key={patient.id}
+                patient={patient}
+                onEdit={handleEditPatient}
+                onDelete={handleDeletePatient}
+              />
             ))}
           </div>
         )}

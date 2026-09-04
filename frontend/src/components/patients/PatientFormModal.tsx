@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Patient } from '../../types/index.js';
-import { Modal } from '../ui/Modal.js';
-import { Input } from '../ui/Input.js';
-import { Textarea } from '../ui/Textarea.js';
-import { Select } from '../ui/Select.js';
-import { Button } from '../ui/Button.js';
-import { api } from '../../lib/api.js';
+import { Patient } from '../../types/index';
+import { Modal } from '../ui/Modal';
+import { Input } from '../ui/Input';
+import { Textarea } from '../ui/Textarea';
+import { Select } from '../ui/Select';
+import { Button } from '../ui/Button';
+import { api } from '../../lib/api';
 
 interface PatientFormModalProps {
   isOpen: boolean;

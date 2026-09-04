@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.js';
-import { Input } from '../components/ui/Input.js';
-import { Button } from '../components/ui/Button.js';
+import { useAuth } from '../context/AuthContext';
+import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
 import { BrainCircuit, Lock, Mail, ShieldCheck } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -24,21 +24,6 @@ export const LoginPage: React.FC = () => {
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión. Revisa tus credenciales.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    setEmail('dr.carlos@psychocare.com');
-    setPassword('password123');
-    setLoading(true);
-    setError(null);
-    try {
-      await login('dr.carlos@psychocare.com', 'password123');
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Error al conectar con la cuenta de demostración.');
     } finally {
       setLoading(false);
     }
@@ -68,37 +53,49 @@ export const LoginPage: React.FC = () => {
         <div className="bg-white py-8 px-6 shadow-2xl rounded-3xl sm:px-10 border border-slate-100">
           <div className="mb-6">
             <h3 className="text-xl font-bold text-slate-900">Iniciar Sesión</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Ingresa a tu consultorio para gestionar pacientes y expedientes
+            <p className="text-xs text-slate-500 mt-0.5">
+              Ingresa a tu consultorio para gestionar pacientes
             </p>
           </div>
 
           {error && (
             <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium">
-              {error}
+              <p>{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <Input
-              label="Correo Electrónico"
-              type="email"
+              label="Usuario o Correo Electrónico"
+              type="text"
+              name="username"
+              autoComplete="username"
               required
-              placeholder="dr.carlos@consultorio.com"
+              placeholder="Fernando01 o tu-email@consultorio.com"
               leftIcon={<Mail className="w-4 h-4" />}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
 
-            <Input
-              label="Contraseña"
-              type="password"
-              required
-              placeholder="••••••••"
-              leftIcon={<Lock className="w-4 h-4" />}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700">Contraseña</label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-semibold text-teal-600 hover:text-teal-700 transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
+              <Input
+                type="password"
+                required
+                placeholder="••••••••"
+                leftIcon={<Lock className="w-4 h-4" />}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
 
             <div className="pt-2">
               <Button type="submit" className="w-full" size="lg" isLoading={loading}>
@@ -106,17 +103,6 @@ export const LoginPage: React.FC = () => {
               </Button>
             </div>
           </form>
-
-          {/* Quick Demo Access */}
-          <div className="mt-5 pt-5 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={handleDemoLogin}
-              className="w-full py-2.5 px-4 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 border border-teal-200/60"
-            >
-              <span>Acceder con Cuenta de Demostración</span>
-            </button>
-          </div>
 
           <div className="mt-6 flex items-center justify-between text-xs text-slate-500">
             <span>¿No tienes una cuenta aún?</span>

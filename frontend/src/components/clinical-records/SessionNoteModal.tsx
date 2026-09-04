@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ClinicalNote, Appointment } from '../../types/index.js';
-import { Modal } from '../ui/Modal.js';
-import { Input } from '../ui/Input.js';
-import { Textarea } from '../ui/Textarea.js';
-import { Button } from '../ui/Button.js';
-import { api } from '../../lib/api.js';
+import { ClinicalNote, Appointment } from '../../types/index';
+import { Modal } from '../ui/Modal';
+import { Input } from '../ui/Input';
+import { Textarea } from '../ui/Textarea';
+import { Button } from '../ui/Button';
+import { api } from '../../lib/api';
 import { Shield, Brain, Sparkles, ClipboardList, CheckSquare, Save } from 'lucide-react';
 
 interface SessionNoteModalProps {

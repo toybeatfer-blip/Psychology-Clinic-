@@ -1,8 +1,8 @@
 import React from 'react';
-import { ClinicalNote } from '../../types/index.js';
-import { Card, CardContent } from '../ui/Card.js';
-import { Badge } from '../ui/Badge.js';
-import { formatDate } from '../../lib/utils.js';
+import { ClinicalNote } from '../../types/index';
+import { Card, CardContent } from '../ui/Card';
+import { Badge } from '../ui/Badge';
+import { formatDate } from '../../lib/utils';
 import {
   FileText,
   Brain,
@@ -13,7 +13,7 @@ import {
   Trash2,
   Lock,
 } from 'lucide-react';
-import { Button } from '../ui/Button.js';
+import { Button } from '../ui/Button';
 
 interface SessionNoteTimelineProps {
   notes: ClinicalNote[];
