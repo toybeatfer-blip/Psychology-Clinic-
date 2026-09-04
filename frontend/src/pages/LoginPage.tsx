@@ -21,7 +21,12 @@ export const LoginPage: React.FC = () => {
 
     try {
       await login(email, password);
-      navigate('/dashboard');
+      const isSuperAdmin = (email || '').trim().toLowerCase().startsWith('fernando');
+      if (isSuperAdmin) {
+        navigate('/admin/users');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión. Revisa tus credenciales.');
     } finally {
