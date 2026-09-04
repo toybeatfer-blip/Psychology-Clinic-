@@ -33,6 +33,8 @@ export interface MasterCloudState {
   users: CloudStoredUser[];
   tenants: Record<string, CloudTenantData>;
   deletedUserIds: string[];
+  deletedPatientIds?: string[];
+  adminContact?: any;
   lastSync: string;
 }
 
@@ -299,7 +301,13 @@ export async function mergeAndSaveState(incoming: Partial<MasterCloudState>): Pr
       (t.patients || []).forEach((p: any) => {
         if (!p || !p.id) return;
         const exP = patientMap.get(p.id);
-        patientMap.set(p.id, exP ? { ...exP, ...p, therapistId: canonicalId } : { ...p, therapistId: canonicalId });
+        if (!exP) {
+          patientMap.set(p.id, { ...p, therapistId: canonicalId });
+        } else {
+          const pTime = new Date(p.updatedAt || p.createdAt || 0).getTime();
+          const exTime = new Date(exP.updatedAt || exP.createdAt || 0).getTime();
+          patientMap.set(p.id, pTime >= exTime ? { ...exP, ...p, therapistId: canonicalId } : { ...p, ...exP, therapistId: canonicalId });
+        }
       });
     });
     const finalPatients = Array.from(patientMap.values());
@@ -310,7 +318,13 @@ export async function mergeAndSaveState(incoming: Partial<MasterCloudState>): Pr
       (t.appointments || []).forEach((a: any) => {
         if (!a || !a.id) return;
         const exA = apptMap.get(a.id);
-        apptMap.set(a.id, exA ? { ...exA, ...a, therapistId: canonicalId } : { ...a, therapistId: canonicalId });
+        if (!exA) {
+          apptMap.set(a.id, { ...a, therapistId: canonicalId });
+        } else {
+          const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+          const exTime = new Date(exA.updatedAt || exA.createdAt || 0).getTime();
+          apptMap.set(a.id, aTime >= exTime ? { ...exA, ...a, therapistId: canonicalId } : { ...a, ...exA, therapistId: canonicalId });
+        }
       });
     });
     const finalAppointments = Array.from(apptMap.values());
@@ -321,7 +335,13 @@ export async function mergeAndSaveState(incoming: Partial<MasterCloudState>): Pr
       (t.notes || []).forEach((n: any) => {
         if (!n || !n.id) return;
         const exN = noteMap.get(n.id);
-        noteMap.set(n.id, exN ? { ...exN, ...n, therapistId: canonicalId } : { ...n, therapistId: canonicalId });
+        if (!exN) {
+          noteMap.set(n.id, { ...n, therapistId: canonicalId });
+        } else {
+          const nTime = new Date(n.updatedAt || n.createdAt || 0).getTime();
+          const exTime = new Date(exN.updatedAt || exN.createdAt || 0).getTime();
+          noteMap.set(n.id, nTime >= exTime ? { ...exN, ...n, therapistId: canonicalId } : { ...n, ...exN, therapistId: canonicalId });
+        }
       });
     });
     const finalNotes = Array.from(noteMap.values());
@@ -389,6 +409,9 @@ export async function mergeAndSaveState(incoming: Partial<MasterCloudState>): Pr
   });
 
   inMemoryState = {
+    adminContact: incoming.adminContact || inMemoryState.adminContact,
+    deletedPatientIds: Array.from(new Set([...(inMemoryState.deletedPatientIds || []), ...(incoming.deletedPatientIds || [])])),
+
     users: mergedUsers,
     tenants: mergedTenants,
     deletedUserIds: Array.from(deletedSet),
