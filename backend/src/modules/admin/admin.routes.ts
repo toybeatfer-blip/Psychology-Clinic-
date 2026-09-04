@@ -9,6 +9,7 @@ router.use(authenticate);
 
 router.get('/users', adminController.getUsersHandler);
 router.delete('/users/:id', adminController.deleteUserHandler);
+router.put('/users/:id/suspension', adminController.toggleSuspensionHandler);
 router.post('/purge-test-data', adminController.purgeDataHandler);
 
 export default router;

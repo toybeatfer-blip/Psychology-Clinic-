@@ -31,3 +31,14 @@ export async function purgeDataHandler(req: Request, res: Response, next: NextFu
     next(error);
   }
 }
+
+export async function toggleSuspensionHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = String(req.params.id);
+    const isSuspended = !!req.body?.isSuspended;
+    const result = await adminService.toggleUserSuspension(id, isSuspended);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}

@@ -1,5 +1,6 @@
 import { prisma } from '../../config/db.js';
 import { CreatePatientInput, UpdatePatientInput } from './patients.schemas.js';
+import * as cloudSyncService from '../cloud-sync/cloud-sync.service.js';
 
 export async function getPatients(
   therapistId: string,
@@ -145,4 +146,78 @@ export async function deletePatient(therapistId: string, patientId: string) {
   });
 
   return { message: 'Paciente eliminado correctamente' };
+}
+
+export async function savePatientConsent(therapistId: string, patientId: string, consent: any) {
+  const masterState = await cloudSyncService.getMasterState();
+  const tenant = masterState.tenants[therapistId] || {
+    patients: [],
+    appointments: [],
+    notes: [],
+    attachments: [],
+  };
+
+  const consents = tenant.consents || {};
+  consents[patientId] = consent;
+
+  tenant.consents = consents;
+  tenant.updatedAt = new Date().toISOString();
+
+  await cloudSyncService.mergeAndSaveState({
+    tenants: {
+      [therapistId]: tenant,
+    },
+  });
+
+  return consent;
+}
+
+export async function savePsychometricTest(therapistId: string, patientId: string, test: any) {
+  const masterState = await cloudSyncService.getMasterState();
+  const tenant = masterState.tenants[therapistId] || {
+    patients: [],
+    appointments: [],
+    notes: [],
+    attachments: [],
+  };
+
+  const tests = tenant.tests || {};
+  const currentTests = tests[patientId] || [];
+  currentTests.unshift(test);
+  tests[patientId] = currentTests;
+
+  tenant.tests = tests;
+  tenant.updatedAt = new Date().toISOString();
+
+  await cloudSyncService.mergeAndSaveState({
+    tenants: {
+      [therapistId]: tenant,
+    },
+  });
+
+  return test;
+}
+
+export async function saveClinicalEvaluation(therapistId: string, patientId: string, evaluation: any) {
+  const masterState = await cloudSyncService.getMasterState();
+  const tenant = masterState.tenants[therapistId] || {
+    patients: [],
+    appointments: [],
+    notes: [],
+    attachments: [],
+  };
+
+  const evaluations = tenant.evaluations || {};
+  evaluations[patientId] = evaluation;
+
+  tenant.evaluations = evaluations;
+  tenant.updatedAt = new Date().toISOString();
+
+  await cloudSyncService.mergeAndSaveState({
+    tenants: {
+      [therapistId]: tenant,
+    },
+  });
+
+  return evaluation;
 }

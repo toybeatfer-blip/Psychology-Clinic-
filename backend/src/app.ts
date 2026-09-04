@@ -56,14 +56,21 @@ export function createApp(): Express {
 
   // Servir frontend compilado en producción si existe
   const possiblePaths = [
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(process.cwd(), 'backend/dist/public'),
     path.resolve(process.cwd(), '../frontend/dist'),
     path.resolve(process.cwd(), 'dist/public'),
     path.resolve(process.cwd(), 'public'),
     path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(__dirname, '../public'),
+    path.resolve(__dirname, 'public'),
   ];
 
+  let frontendServed = false;
   for (const staticPath of possiblePaths) {
-    if (fs.existsSync(staticPath)) {
+    if (fs.existsSync(staticPath) && fs.existsSync(path.join(staticPath, 'index.html'))) {
+      console.log(`📦 Sirviendo frontend estático desde: ${staticPath}`);
       app.use(express.static(staticPath));
       app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
@@ -71,8 +78,13 @@ export function createApp(): Express {
         }
         res.sendFile(path.join(staticPath, 'index.html'));
       });
+      frontendServed = true;
       break;
     }
+  }
+
+  if (!frontendServed) {
+    console.log('ℹ️ Frontend estático no encontrado en rutas locales. Modo API activo.');
   }
 
   // Manejador global de errores

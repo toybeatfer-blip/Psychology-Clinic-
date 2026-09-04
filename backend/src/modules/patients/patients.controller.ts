@@ -84,3 +84,39 @@ export async function deletePatient(req: Request, res: Response, next: NextFunct
     next(error);
   }
 }
+
+export async function saveConsentHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const therapistId = req.user!.userId;
+    const patientId = req.params.id as string;
+    const consent = req.body;
+    await patientsService.savePatientConsent(therapistId, patientId, consent);
+    res.status(200).json({ success: true, data: consent });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function savePsychometricTestHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const therapistId = req.user!.userId;
+    const patientId = req.params.id as string;
+    const testData = req.body;
+    await patientsService.savePsychometricTest(therapistId, patientId, testData);
+    res.status(200).json({ success: true, data: testData });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function saveClinicalEvaluationHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const therapistId = req.user!.userId;
+    const patientId = req.params.id as string;
+    const evaluation = req.body;
+    await patientsService.saveClinicalEvaluation(therapistId, patientId, evaluation);
+    res.status(200).json({ success: true, data: evaluation });
+  } catch (error) {
+    next(error);
+  }
+}

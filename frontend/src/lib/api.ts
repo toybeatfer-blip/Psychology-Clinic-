@@ -46,17 +46,11 @@ export function getApiBaseUrl(): string {
 }
 
 export function hasCustomBackendConfigured(): boolean {
-  if (typeof window !== 'undefined') {
-    const custom = localStorage.getItem('psychocare_api_url');
-    if (custom && custom.trim() && custom.trim() !== '/api') return true;
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return true;
-  }
-  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) return true;
-  return false;
+  return true;
 }
 
 function shouldUseLocalEngine(): boolean {
-  return !hasCustomBackendConfigured();
+  return false;
 }
 
 // -------------------------------------------------------------
@@ -937,13 +931,10 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
 
 export const api = {
   async get<T>(endpoint: string): Promise<T> {
-    if (shouldUseLocalEngine()) {
-      return handleMockRequest<T>(endpoint, 'GET');
-    }
-
     const token = typeof window !== 'undefined' ? localStorage.getItem('psychocare_token') : null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -951,10 +942,14 @@ export const api = {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
       const res = await fetch(`${baseUrl}${cleanEndpoint}`, {
         method: 'GET',
         headers,
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -963,19 +958,16 @@ export const api = {
 
       return res.json();
     } catch (networkError: any) {
-      console.warn(`[Modo Local Activado] Fallback por: ${networkError.message}`);
+      console.warn(`[Modo Local / Cache Activado] Fallback por: ${networkError.message}`);
       return handleMockRequest<T>(endpoint, 'GET');
     }
   },
 
   async post<T>(endpoint: string, body?: any): Promise<T> {
-    if (shouldUseLocalEngine()) {
-      return handleMockRequest<T>(endpoint, 'POST', body);
-    }
-
     const token = typeof window !== 'undefined' ? localStorage.getItem('psychocare_token') : null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -983,32 +975,38 @@ export const api = {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
       const res = await fetch(`${baseUrl}${cleanEndpoint}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.message || `Error HTTP ${res.status}: ${res.statusText}`);
       }
 
-      return res.json();
+      const result = await res.json();
+      try {
+        handleMockRequest<T>(endpoint, 'POST', body);
+      } catch {}
+
+      return result;
     } catch (networkError: any) {
-      console.warn(`[Modo Local Activado] Fallback por: ${networkError.message}`);
+      console.warn(`[Modo Local / Cache Activado] Fallback por: ${networkError.message}`);
       return handleMockRequest<T>(endpoint, 'POST', body);
     }
   },
 
   async put<T>(endpoint: string, body?: any): Promise<T> {
-    if (shouldUseLocalEngine()) {
-      return handleMockRequest<T>(endpoint, 'PUT', body);
-    }
-
     const token = typeof window !== 'undefined' ? localStorage.getItem('psychocare_token') : null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -1016,32 +1014,38 @@ export const api = {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
       const res = await fetch(`${baseUrl}${cleanEndpoint}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.message || `Error HTTP ${res.status}: ${res.statusText}`);
       }
 
-      return res.json();
+      const result = await res.json();
+      try {
+        handleMockRequest<T>(endpoint, 'PUT', body);
+      } catch {}
+
+      return result;
     } catch (networkError: any) {
-      console.warn(`[Modo Local Activado] Fallback por: ${networkError.message}`);
+      console.warn(`[Modo Local / Cache Activado] Fallback por: ${networkError.message}`);
       return handleMockRequest<T>(endpoint, 'PUT', body);
     }
   },
 
   async delete<T>(endpoint: string): Promise<T> {
-    if (shouldUseLocalEngine()) {
-      return handleMockRequest<T>(endpoint, 'DELETE');
-    }
-
     const token = typeof window !== 'undefined' ? localStorage.getItem('psychocare_token') : null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -1049,19 +1053,28 @@ export const api = {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
       const res = await fetch(`${baseUrl}${cleanEndpoint}`, {
         method: 'DELETE',
         headers,
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.message || `Error HTTP ${res.status}: ${res.statusText}`);
       }
 
-      return res.json();
+      const result = await res.json();
+      try {
+        handleMockRequest<T>(endpoint, 'DELETE');
+      } catch {}
+
+      return result;
     } catch (networkError: any) {
-      console.warn(`[Modo Local Activado] Fallback por: ${networkError.message}`);
+      console.warn(`[Modo Local / Cache Activado] Fallback por: ${networkError.message}`);
       return handleMockRequest<T>(endpoint, 'DELETE');
     }
   },

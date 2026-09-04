@@ -86,76 +86,50 @@ function mergeProfiles(base?: TherapistProfile | null, override?: TherapistProfi
   };
 }
 
-// Obtener datos consolidados desde la Nube Global
+// Obtener datos consolidados desde la Base de Datos Central en Render / Servidor API
 export async function fetchMasterCloudState(): Promise<MasterCloudState | null> {
-  // 1. Intento Primario: Base de Datos Cloud REST de Alta Velocidad
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(CLOUD_API_URL, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+  const baseUrl = getBackendBaseUrl();
+  const candidateUrls = [
+    `${baseUrl}/cloud-sync`,
+    '/api/cloud-sync',
+    'http://localhost:4000/api/cloud-sync',
+  ];
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.data && Array.isArray(data.data.users)) {
-        return data.data as MasterCloudState;
+  const testedUrls = new Set<string>();
+
+  for (const url of candidateUrls) {
+    if (testedUrls.has(url)) continue;
+    testedUrls.add(url);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const body = await res.json();
+        const stateData = body?.data || body;
+        if (stateData && Array.isArray(stateData.users)) {
+          return stateData as MasterCloudState;
+        }
       }
+    } catch (err) {
+      // Intentar con siguiente candidato
     }
-  } catch (err) {
-    console.warn('[CloudSync] Intento primario REST:', err);
-  }
-
-  // 2. Intento Secundario: Repositorio GitHub Raw (Solo Lectura Pública Anónima)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(`${GITHUB_RAW_URL}?t=${Date.now()}`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const parsed = await res.json();
-      if (parsed && Array.isArray(parsed.users)) {
-        return parsed as MasterCloudState;
-      }
-    }
-  } catch (err) {
-    console.warn('[CloudSync] Intento secundario GitHub Raw:', err);
-  }
-
-  // 3. Intento Terciario: Backend Node/PostgreSQL
-  try {
-    const baseUrl = getBackendBaseUrl();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(`${baseUrl}/cloud-sync`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const body = await res.json();
-      if (body && body.data && Array.isArray(body.data.users)) {
-        return body.data as MasterCloudState;
-      }
-    }
-  } catch (err) {
-    console.warn('[CloudSync] Intento terciario backend:', err);
   }
 
   return null;
 }
 
-// Guardar / Actualizar datos consolidados en la Nube Global
+// Guardar / Actualizar datos consolidados en la Base de Datos Central
 export async function pushMasterCloudState(state: MasterCloudState): Promise<boolean> {
   let success = false;
 
@@ -164,43 +138,43 @@ export async function pushMasterCloudState(state: MasterCloudState): Promise<boo
     lastSync: new Date().toISOString(),
   };
 
-  // 1. Guardar en Base de Datos Cloud REST Global
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(CLOUD_API_URL, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: 'PsychologyClinic_MasterState',
-        data: payload,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+  const baseUrl = getBackendBaseUrl();
+  const candidateUrls = [
+    `${baseUrl}/cloud-sync`,
+    '/api/cloud-sync',
+    'http://localhost:4000/api/cloud-sync',
+  ];
 
-    if (res.ok) {
-      success = true;
+  const testedUrls = new Set<string>();
+
+  for (const url of candidateUrls) {
+    if (testedUrls.has(url)) continue;
+    testedUrls.add(url);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          data: payload,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        success = true;
+        break;
+      }
+    } catch (err) {
+      // Intentar con siguiente candidato
     }
-  } catch (err) {
-    console.warn('[CloudSync] Error guardando en Cloud REST:', err);
   }
-
-  // 2. Sincronizar en segundo plano con el backend si está disponible
-  try {
-    const baseUrl = getBackendBaseUrl();
-    fetch(`${baseUrl}/cloud-sync`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        data: payload,
-      }),
-    }).catch(() => {});
-  } catch {}
 
   return success;
 }

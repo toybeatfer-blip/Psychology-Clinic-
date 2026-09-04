@@ -47,27 +47,41 @@ let inMemoryState: MasterCloudState = {
   lastSync: new Date().toISOString(),
 };
 
-// Cargar estado inicial desde disco
+// Cargar estado inicial desde disco buscando en rutas posibles
 function loadStateFromDisk(): void {
+  const candidateFiles = [
+    STATE_FILE,
+    path.resolve(process.cwd(), 'backend/data/master_cloud_state.json'),
+    path.resolve(__dirname, '../../data/master_cloud_state.json'),
+    path.resolve(__dirname, '../../../data/master_cloud_state.json'),
+  ];
+
+  for (const file of candidateFiles) {
+    try {
+      if (fs.existsSync(file)) {
+        const raw = fs.readFileSync(file, 'utf-8');
+        if (raw && raw.trim()) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.users)) {
+            inMemoryState = parsed;
+            console.log(`📂 Estado maestro cargado desde: ${file} (${inMemoryState.users.length} usuarios)`);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[CloudSyncBackend] Error al leer estado desde:', file, err);
+    }
+  }
+
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    if (fs.existsSync(STATE_FILE)) {
-      const raw = fs.readFileSync(STATE_FILE, 'utf-8');
-      if (raw && raw.trim()) {
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.users)) {
-          inMemoryState = parsed;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[CloudSyncBackend] Error al leer estado desde disco:', err);
-  }
+  } catch {}
 }
 
-// Guardar estado en disco de forma asíncrona segura
+// Guardar estado en disco de forma segura
 function saveStateToDisk(): void {
   try {
     if (!fs.existsSync(DATA_DIR)) {
