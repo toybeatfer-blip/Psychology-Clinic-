@@ -117,31 +117,57 @@ export function getAdminContactInfo(): AdminContactInfo {
       const p = JSON.parse(raw);
       if (p && typeof p === 'object') {
         return {
-          adminName: p.adminName || 'Fernando (Super Administrador)',
+          adminName: p.adminName || 'Fernando',
           phoneWhatsApp: p.phoneWhatsApp || '+52 474 1539891',
           email: p.email || 'toybeatfer@gmail.com',
-          helpMessage: p.helpMessage || 'Para renovar tu membresía mensual o resolver dudas técnicas, contacta al Super Administrador.',
+          helpMessage: p.helpMessage || 'Soporte oficial, integración de consultorios y asistencia técnica.',
           updatedAt: p.updatedAt || '2026-01-01T00:00:00.000Z'
         };
       }
     }
   } catch {}
   return {
-    adminName: 'Fernando (Super Administrador)',
+    adminName: 'Fernando',
     phoneWhatsApp: '+52 474 1539891',
     email: 'toybeatfer@gmail.com',
-    helpMessage: 'Para renovar tu membresía mensual o resolver dudas técnicas, contacta al Super Administrador.',
+    helpMessage: 'Soporte oficial, integración de consultorios y asistencia técnica.',
     updatedAt: '2026-01-01T00:00:00.000Z'
   };
+}
+
+export async function fetchPublicCreatorContact(): Promise<AdminContactInfo> {
+  try {
+    const baseUrl = getBackendBaseUrl();
+    const candidateUrls = [
+      `${baseUrl}/admin/public-contact`,
+      '/api/admin/public-contact',
+      'http://localhost:4000/api/admin/public-contact',
+    ];
+
+    for (const url of candidateUrls) {
+      try {
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+          const body = await res.json();
+          const contact = body?.data || body;
+          if (contact && contact.adminName) {
+            saveAdminContactInfo(contact, false);
+            return contact;
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+  return getAdminContactInfo();
 }
 
 export function saveAdminContactInfo(info: AdminContactInfo, syncToCloud: boolean = true): void {
   try {
     const fresh: AdminContactInfo = {
-      adminName: info.adminName || 'Fernando (Super Administrador)',
+      adminName: info.adminName || 'Fernando',
       phoneWhatsApp: info.phoneWhatsApp || '+52 474 1539891',
       email: info.email || 'toybeatfer@gmail.com',
-      helpMessage: info.helpMessage || '',
+      helpMessage: info.helpMessage || 'Soporte oficial, integración de consultorios y asistencia técnica.',
       updatedAt: syncToCloud ? new Date().toISOString() : (info.updatedAt || new Date().toISOString())
     };
     localStorage.setItem('psychocare_admin_contact', JSON.stringify(fresh));
@@ -152,6 +178,46 @@ export function saveAdminContactInfo(info: AdminContactInfo, syncToCloud: boolea
       }
     }
   } catch {}
+}
+
+export async function updateCreatorContactAsAdmin(info: Partial<AdminContactInfo>): Promise<AdminContactInfo> {
+  const current = getAdminContactInfo();
+  const updated: AdminContactInfo = {
+    adminName: info.adminName !== undefined ? info.adminName.trim() : current.adminName,
+    email: info.email !== undefined ? info.email.trim() : current.email,
+    phoneWhatsApp: info.phoneWhatsApp !== undefined ? info.phoneWhatsApp.trim() : current.phoneWhatsApp,
+    helpMessage: info.helpMessage !== undefined ? info.helpMessage.trim() : current.helpMessage,
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveAdminContactInfo(updated, true);
+
+  // Intentar persistir en el backend mediante el endpoint protegido
+  try {
+    const token = localStorage.getItem('psychocare_token');
+    const baseUrl = getBackendBaseUrl();
+    const candidateUrls = [
+      `${baseUrl}/admin/creator-contact`,
+      '/api/admin/creator-contact',
+      'http://localhost:4000/api/admin/creator-contact',
+    ];
+
+    for (const url of candidateUrls) {
+      try {
+        await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(updated)
+        });
+      } catch {}
+    }
+  } catch {}
+
+  return updated;
 }
 
 export function mergeAdminContacts(local: AdminContactInfo, remote?: AdminContactInfo | null): AdminContactInfo {

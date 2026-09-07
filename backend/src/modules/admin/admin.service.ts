@@ -95,3 +95,44 @@ export async function purgeResidualTestData() {
 
   return { success: true, message: 'Datos residuales purgados exitosamente.' };
 }
+
+export async function getCreatorContact() {
+  const masterState = await cloudSyncService.getMasterState();
+  return masterState.adminContact || {
+    adminName: 'Fernando',
+    email: 'toybeatfer@gmail.com',
+    phoneWhatsApp: '+52 474 1539891',
+    helpMessage: 'Para soporte técnico, alta de consultorios o dudas del sistema, comunícate directamente con el Creador.',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+export async function updateCreatorContact(contactData: {
+  adminName?: string;
+  email?: string;
+  phoneWhatsApp?: string;
+  helpMessage?: string;
+}) {
+  const masterState = await cloudSyncService.getMasterState();
+  const current = masterState.adminContact || {
+    adminName: 'Fernando',
+    email: 'toybeatfer@gmail.com',
+    phoneWhatsApp: '+52 474 1539891',
+    helpMessage: 'Para soporte técnico, alta de consultorios o dudas del sistema, comunícate directamente con el Creador.',
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedContact = {
+    ...current,
+    adminName: contactData.adminName !== undefined ? contactData.adminName.trim() : current.adminName,
+    email: contactData.email !== undefined ? contactData.email.trim() : current.email,
+    phoneWhatsApp: contactData.phoneWhatsApp !== undefined ? contactData.phoneWhatsApp.trim() : current.phoneWhatsApp,
+    helpMessage: contactData.helpMessage !== undefined ? contactData.helpMessage.trim() : current.helpMessage,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await cloudSyncService.updateAdminContactInState(updatedContact);
+
+  return updatedContact;
+}
+

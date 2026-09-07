@@ -6,7 +6,13 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { api } from '../lib/api';
-import { syncLocalWithCloud, getDeterministicUserId } from '../lib/cloudSync';
+import {
+  syncLocalWithCloud,
+  getDeterministicUserId,
+  getAdminContactInfo,
+  updateCreatorContactAsAdmin,
+  AdminContactInfo,
+} from '../lib/cloudSync';
 import { RegisteredUserSummary, Patient, Appointment, ClinicalNote } from '../types/index';
 import { formatDate, formatTime } from '../lib/utils';
 import {
@@ -38,7 +44,13 @@ import {
   Upload,
   Globe,
   Server,
+  Code2,
+  MessageCircle,
+  Lock,
+  Send,
+  ExternalLink,
 } from 'lucide-react';
+
 
 export const AdminUsersPage: React.FC = () => {
   const { user } = useAuth();
@@ -82,6 +94,30 @@ export const AdminUsersPage: React.FC = () => {
   // Modal de Inspección de Actividad en Vivo
   const [inspectingUser, setInspectingUser] = useState<RegisteredUserSummary | null>(null);
   const [inspectTab, setInspectTab] = useState<'patients' | 'appointments' | 'notes'>('patients');
+
+  // Modal de Configuración del Contacto del Creador (Exclusivo Fernando / Super Admin)
+  const [isCreatorModalOpen, setIsCreatorModalOpen] = useState(false);
+  const [creatorForm, setCreatorForm] = useState<AdminContactInfo>(getAdminContactInfo);
+  const [creatorSaving, setCreatorSaving] = useState(false);
+  const [creatorSuccessMsg, setCreatorSuccessMsg] = useState<string | null>(null);
+
+  const handleSaveCreatorContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatorSaving(true);
+    try {
+      const updated = await updateCreatorContactAsAdmin(creatorForm);
+      setCreatorForm(updated);
+      setCreatorSuccessMsg('¡Datos de contacto del Creador actualizados y protegidos en la nube exitosamente!');
+      setTimeout(() => {
+        setCreatorSuccessMsg(null);
+        setIsCreatorModalOpen(false);
+      }, 1800);
+    } catch (err: any) {
+      alert('Error al guardar datos de contacto: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setCreatorSaving(false);
+    }
+  };
 
   // Modal de Configuración Cloud & Respaldo
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
@@ -452,6 +488,19 @@ export const AdminUsersPage: React.FC = () => {
         subtitle="Control global en tiempo real de licencias, consultorios y actividad en vivo"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCreatorForm(getAdminContactInfo());
+                setIsCreatorModalOpen(true);
+              }}
+              leftIcon={<Code2 className="w-4 h-4 text-teal-600" />}
+              className="border-teal-300 text-teal-800 bg-teal-50/50 hover:bg-teal-100/60 font-semibold"
+              title="Modificar tus datos de contacto oficiales del Creador para Login y Soporte"
+            >
+              Contacto del Creador
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1075,6 +1124,144 @@ export const AdminUsersPage: React.FC = () => {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Exclusivo: Configuración de Datos de Contacto del Creador (Fernando) */}
+      {isCreatorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-xl overflow-hidden relative animate-in zoom-in-95 duration-200">
+            {/* Cabecera del modal */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 text-white relative">
+              <button
+                type="button"
+                onClick={() => setIsCreatorModalOpen(false)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+                title="Cerrar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shadow-inner">
+                  <Code2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-400/10 border border-teal-400/30 text-teal-300 text-[10px] font-bold mb-1">
+                    <Lock className="w-3 h-3 text-teal-300" />
+                    <span>Exclusivo: Super Administrador & Creador</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white">Datos de Contacto del Creador</h3>
+                  <p className="text-xs text-slate-300">
+                    Solo tú puedes modificar esta información. Se mostrará en el pie de inicio de sesión de PsychoCare.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleSaveCreatorContact}>
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                {creatorSuccessMsg && (
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{creatorSuccessMsg}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Nombre o Título del Creador *"
+                      type="text"
+                      required
+                      placeholder="Ej. Fernando"
+                      value={creatorForm.adminName}
+                      onChange={(e) => setCreatorForm((prev) => ({ ...prev, adminName: e.target.value }))}
+                      leftIcon={<ShieldCheck className="w-4 h-4 text-teal-600" />}
+                    />
+                  </div>
+
+                  <Input
+                    label="Correo Electrónico de Contacto *"
+                    type="email"
+                    required
+                    placeholder="toybeatfer@gmail.com"
+                    value={creatorForm.email}
+                    onChange={(e) => setCreatorForm((prev) => ({ ...prev, email: e.target.value }))}
+                    leftIcon={<Mail className="w-4 h-4 text-teal-600" />}
+                  />
+
+                  <Input
+                    label="WhatsApp / Teléfono de Contacto"
+                    type="text"
+                    placeholder="+52 474 1539891"
+                    value={creatorForm.phoneWhatsApp}
+                    onChange={(e) => setCreatorForm((prev) => ({ ...prev, phoneWhatsApp: e.target.value }))}
+                    leftIcon={<Phone className="w-4 h-4 text-teal-600" />}
+                  />
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Mensaje de Bienvenida / Asistencia Técnica
+                    </label>
+                    <textarea
+                      rows={3}
+                      className="w-full text-xs rounded-xl border border-slate-300 p-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-800"
+                      placeholder="Para soporte técnico, alta de consultorios o dudas del sistema, comunícate directamente con el Creador..."
+                      value={creatorForm.helpMessage || ''}
+                      onChange={(e) => setCreatorForm((prev) => ({ ...prev, helpMessage: e.target.value }))}
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Este mensaje aparecerá en la ventana de ayuda de la pantalla de inicio de sesión cuando alguien haga clic en tu contacto.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Vista previa en vivo */}
+                <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-2 border border-slate-800">
+                  <div className="flex items-center justify-between text-[11px] text-teal-400 font-semibold uppercase tracking-wider">
+                    <span>Vista Previa en Vivo (Pantalla de Login)</span>
+                    <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                  </div>
+                  <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+                      <span className="text-slate-300">
+                        Creado por <strong className="text-teal-300 font-semibold">{creatorForm.adminName || 'Fernando'}</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                      <span>{creatorForm.email || 'correo@ejemplo.com'}</span>
+                      {creatorForm.phoneWhatsApp && (
+                        <span>• WhatsApp: {creatorForm.phoneWhatsApp}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-teal-50/60 border border-teal-200/80 rounded-xl text-teal-900 text-xs flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-bold">Protección de Seguridad:</strong>
+                    <p className="text-[11px] text-teal-800 mt-0.5">
+                      Solo las sesiones autenticadas como Creador / Super Administrador tienen autorización para cambiar estos datos en la base de datos y en la bóveda en la nube.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+                <Button variant="ghost" size="sm" type="button" onClick={() => setIsCreatorModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button variant="primary" size="sm" type="submit" isLoading={creatorSaving} leftIcon={<CheckCircle2 className="w-4 h-4" />}>
+                  Guardar y Sincronizar Datos
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

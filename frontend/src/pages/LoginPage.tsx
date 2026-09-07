@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import {
+  getAdminContactInfo,
+  fetchPublicCreatorContact,
+  AdminContactInfo,
+} from '../lib/cloudSync';
 import {
   BrainCircuit,
   Lock,
@@ -16,6 +21,7 @@ import {
   X,
   Send,
   CheckCircle2,
+  ExternalLink,
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -25,6 +31,9 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
 
+  // Contacto dinámico y protegido del Creador
+  const [contactInfo, setContactInfo] = useState<AdminContactInfo>(getAdminContactInfo);
+
   // Estado para formulario de contacto rápido
   const [contactMsg, setContactMsg] = useState('');
   const [contactSender, setContactSender] = useState('');
@@ -32,6 +41,21 @@ export const LoginPage: React.FC = () => {
 
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchPublicCreatorContact().then((info) => {
+      if (info) setContactInfo(info);
+    });
+
+    const handleUpdated = (e: any) => {
+      if (e.detail) setContactInfo(e.detail);
+    };
+
+    window.addEventListener('psychocare_admin_contact_updated', handleUpdated);
+    return () => {
+      window.removeEventListener('psychocare_admin_contact_updated', handleUpdated);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +176,7 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Pie de página con el contacto del Creador */}
+        {/* Pie de página con el contacto dinámico y protegido del Creador */}
         <div className="mt-8 text-center text-xs text-slate-400 space-y-2.5">
           <div className="flex items-center justify-center gap-2">
             <button
@@ -162,29 +186,36 @@ export const LoginPage: React.FC = () => {
             >
               <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
               <span>
-                Creado y Desarrollado por <strong className="text-teal-300 font-semibold">Fernando</strong>
+                Creado y Desarrollado por <strong className="text-teal-300 font-semibold">{contactInfo.adminName || 'Fernando'}</strong>
               </span>
               <span className="text-slate-500 group-hover:text-teal-400 text-[11px]">• Contactar</span>
             </button>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-400">
-            <a
-              href="mailto:fernandocreador@psychocare.app?subject=Consulta%20PsychoCare%20-%20Contacto%20Creador"
-              className="hover:text-teal-300 transition-colors inline-flex items-center gap-1"
-            >
-              <Mail className="w-3 h-3 text-teal-400" />
-              <span>fernandocreador@psychocare.app</span>
-            </a>
-            <span className="hidden sm:inline text-slate-700">•</span>
-            <button
-              type="button"
-              onClick={() => setShowContactModal(true)}
-              className="hover:text-teal-300 transition-colors inline-flex items-center gap-1 cursor-pointer"
-            >
-              <MessageCircle className="w-3 h-3 text-teal-400" />
-              <span>Soporte Directo del Creador</span>
-            </button>
+            {contactInfo.email && (
+              <a
+                href={`mailto:${contactInfo.email}?subject=Consulta%20PsychoCare%20-%20Contacto%20Creador`}
+                className="hover:text-teal-300 transition-colors inline-flex items-center gap-1"
+              >
+                <Mail className="w-3 h-3 text-teal-400" />
+                <span>{contactInfo.email}</span>
+              </a>
+            )}
+            {contactInfo.email && contactInfo.phoneWhatsApp && (
+              <span className="hidden sm:inline text-slate-700">•</span>
+            )}
+            {contactInfo.phoneWhatsApp && (
+              <a
+                href={`https://wa.me/${contactInfo.phoneWhatsApp.replace(/[^0-9]/g, '')}?text=Hola%20${encodeURIComponent(contactInfo.adminName || 'Fernando')},%20te%20contacto%20desde%20PsychoCare.`}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-teal-300 transition-colors inline-flex items-center gap-1"
+              >
+                <MessageCircle className="w-3 h-3 text-emerald-400" />
+                <span>WhatsApp: {contactInfo.phoneWhatsApp}</span>
+              </a>
+            )}
           </div>
 
           <p className="text-[10px] text-slate-400">
@@ -217,7 +248,7 @@ export const LoginPage: React.FC = () => {
                     <Sparkles className="w-3 h-3" />
                     <span>Creador & Administrador del Sistema</span>
                   </div>
-                  <h4 className="text-lg font-bold text-white">Fernando</h4>
+                  <h4 className="text-lg font-bold text-white">{contactInfo.adminName || 'Fernando'}</h4>
                   <p className="text-xs text-slate-300">Desarrollador de PsychoCare</p>
                 </div>
               </div>
@@ -226,32 +257,56 @@ export const LoginPage: React.FC = () => {
             {/* Contenido del modal */}
             <div className="p-6 space-y-5">
               <p className="text-xs text-slate-600 leading-relaxed">
-                ¿Tienes dudas, requieres soporte técnico, necesitas dar de alta nuevos consultorios o deseas proponer nuevas funciones para el sistema? Ponte en contacto directo:
+                {contactInfo.helpMessage || '¿Tienes dudas, requieres soporte técnico, necesitas dar de alta nuevos consultorios o deseas proponer nuevas funciones para el sistema? Ponte en contacto directo:'}
               </p>
 
               {/* Canales directos de contacto */}
               <div className="space-y-2.5">
-                <a
-                  href="mailto:fernandocreador@psychocare.app?subject=Soporte%20PsychoCare%20-%20Contacto%20Creador"
-                  className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-teal-50 border border-slate-200/80 hover:border-teal-200 transition-all text-xs group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <Mail className="w-4 h-4" />
+                {contactInfo.email && (
+                  <a
+                    href={`mailto:${contactInfo.email}?subject=Soporte%20PsychoCare%20-%20Contacto%20Creador`}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-teal-50 border border-slate-200/80 hover:border-teal-200 transition-all text-xs group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800 group-hover:text-teal-900">Correo Electrónico Directo</p>
+                        <p className="text-[11px] text-slate-500">{contactInfo.email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-slate-800 group-hover:text-teal-900">Correo Electrónico Directo</p>
-                      <p className="text-[11px] text-slate-500">fernandocreador@psychocare.app</p>
+                    <span className="text-[11px] font-semibold text-teal-600 group-hover:translate-x-0.5 transition-transform">
+                      Enviar →
+                    </span>
+                  </a>
+                )}
+
+                {contactInfo.phoneWhatsApp && (
+                  <a
+                    href={`https://wa.me/${contactInfo.phoneWhatsApp.replace(/[^0-9]/g, '')}?text=Hola%20${encodeURIComponent(contactInfo.adminName || 'Fernando')},%20solicito%20soporte%20en%20PsychoCare.`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-emerald-50 border border-slate-200/80 hover:border-emerald-200 transition-all text-xs group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <MessageCircle className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800 group-hover:text-emerald-900">WhatsApp / Soporte Directo</p>
+                        <p className="text-[11px] text-slate-500">{contactInfo.phoneWhatsApp}</p>
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-[11px] font-semibold text-teal-600 group-hover:translate-x-0.5 transition-transform">
-                    Enviar →
-                  </span>
-                </a>
+                    <span className="text-[11px] font-semibold text-emerald-600 group-hover:translate-x-0.5 transition-transform">
+                      Abrir WhatsApp →
+                    </span>
+                  </a>
+                )}
 
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center">
                       <UserCheck className="w-4 h-4" />
                     </div>
                     <div>
@@ -291,7 +346,7 @@ export const LoginPage: React.FC = () => {
                         required
                         rows={3}
                         className="w-full text-xs rounded-xl border border-slate-300 p-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                        placeholder="Escribe tu mensaje, sugerencia o solicitud de soporte para Fernando..."
+                        placeholder={`Escribe tu mensaje, sugerencia o solicitud de soporte para ${contactInfo.adminName || 'Fernando'}...`}
                         value={contactMsg}
                         onChange={(e) => setContactMsg(e.target.value)}
                       />
@@ -310,7 +365,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowContactModal(false)}
-                className="font-semibold text-slate-700 hover:text-slate-900"
+                className="font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
               >
                 Cerrar
               </button>

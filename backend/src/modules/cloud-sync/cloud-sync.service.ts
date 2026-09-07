@@ -553,3 +553,14 @@ export async function toggleUserSuspension(userId: string, isSuspended: boolean)
   saveStateToDisk();
   return inMemoryState;
 }
+
+export async function updateAdminContactInState(contact: any): Promise<MasterCloudState> {
+  inMemoryState.adminContact = {
+    ...(inMemoryState.adminContact || {}),
+    ...contact,
+    updatedAt: new Date().toISOString(),
+  };
+  inMemoryState.lastSync = new Date().toISOString();
+  saveStateToDisk();
+  return inMemoryState;
+}
