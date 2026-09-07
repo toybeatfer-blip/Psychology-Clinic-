@@ -173,6 +173,16 @@ export const RegisterPage: React.FC = () => {
             </Link>
           </div>
         </div>
+
+        {/* Pie de página con mención del Creador */}
+        <div className="mt-6 text-center text-xs text-slate-400 space-y-1">
+          <p className="text-[11px] text-slate-400">
+            Desarrollado y Creado por <strong className="text-teal-400 font-semibold">Fernando</strong>
+          </p>
+          <p className="text-[10px] text-slate-400">
+            PsychoCare Cloud v2.4 • Consultorio Seguro
+          </p>
+        </div>
       </div>
     </div>
   );
