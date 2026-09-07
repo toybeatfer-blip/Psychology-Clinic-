@@ -76,6 +76,9 @@ export function createApp(): Express {
         if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
           return next();
         }
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, post-check=0, pre-check=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.sendFile(path.join(staticPath, 'index.html'));
       });
       frontendServed = true;
