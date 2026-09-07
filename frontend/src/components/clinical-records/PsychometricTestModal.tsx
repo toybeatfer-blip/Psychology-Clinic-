@@ -14,6 +14,9 @@ import {
   Sparkles,
   Award,
   Calendar,
+  Flame,
+  Smile,
+  Zap,
 } from 'lucide-react';
 
 interface PsychometricTestModalProps {
@@ -31,6 +34,7 @@ const SCALES_DATA: Record<
     name: string;
     description: string;
     instructions: string;
+    category: 'DEPRESSION' | 'ANXIETY' | 'STRESS' | 'SELF_ESTEEM' | 'WELLBEING' | 'BURNOUT' | 'CRISIS' | 'OTHER';
     options: { label: string; value: number }[];
     questions: string[];
     calculateResult: (answers: Record<number, number>) => {
@@ -45,13 +49,14 @@ const SCALES_DATA: Record<
 > = {
   PHQ9: {
     name: 'PHQ-9 (Cuestionario de Salud del Paciente - Depresión)',
-    description: 'Instrumento clínico estandarizado para evaluar la presencia y gravedad de sintomatología depresiva.',
+    description: 'Instrumento clínico estandarizado internacionalmente para evaluar la presencia y severidad de síntomas depresivos mayores.',
     instructions: 'Durante las últimas 2 semanas, ¿con qué frecuencia ha experimentado los siguientes síntomas?',
+    category: 'DEPRESSION',
     options: [
       { label: 'Para nada (0)', value: 0 },
       { label: 'Varios días (1)', value: 1 },
-      { label: 'Más de la mitad de los días (2)', value: 2 },
-      { label: 'Casi todos los días (3)', value: 3 },
+      { label: 'Más de la mitad (2)', value: 2 },
+      { label: 'Casi a diario (3)', value: 3 },
     ],
     questions: [
       '1. Poco interés o placer en hacer las cosas (anhedonia)',
@@ -59,9 +64,9 @@ const SCALES_DATA: Record<
       '3. Problemas para conciliar el sueño, mantenerse dormido/a o dormir demasiado',
       '4. Sentirse cansado/a o con poca energía',
       '5. Poco apetito o comer en exceso',
-      '6. Sentirse mal con uno/a mismo/a, sentir que ha fracasado o que ha defraudado a su familia',
+      '6. Sentirse mal con uno/a mismo/a, sentir que ha fracasado o defraudado a su familia',
       '7. Dificultad para concentrarse en cosas tales como leer o ver televisión',
-      '8. Moverse o hablar tan despacio que los demás lo han notado, o lo contrario: estar inquieto/a o agitado/a',
+      '8. Moverse o hablar tan despacio que los demás lo han notado, o estar demasiado inquieto/a',
       '9. Pensamientos de que estaría mejor muerto/a o de lastimarse de alguna manera',
     ],
     calculateResult: (answers) => {
@@ -74,24 +79,24 @@ const SCALES_DATA: Record<
 
       let severity = 'Sin síntomas depresivos / Mínimo';
       let severityColor: 'emerald' | 'amber' | 'orange' | 'rose' | 'indigo' = 'emerald';
-      let interpretation = 'Puntuación dentro de límites normales. No se detecta depresión significativa.';
+      let interpretation = 'Puntuación dentro de límites normales. No se detecta depresión clínicamente significativa.';
 
       if (score >= 5 && score <= 9) {
-        severity = 'Sintomatología Depresiva Leve';
+        severity = 'Depresión Leve';
         severityColor = 'emerald';
-        interpretation = 'Presencia de síntomas leves. Sugerido monitoreo clínico y psicoeducación.';
+        interpretation = 'Presencia de síntomas leves. Sugerido monitoreo clínico, psicoeducación y hábitos de autocuidado.';
       } else if (score >= 10 && score <= 14) {
         severity = 'Depresión Moderada';
         severityColor = 'amber';
-        interpretation = 'Requiere plan de tratamiento psicoterapéutico focalizado (ej. TCC, Activación Conductual).';
+        interpretation = 'Trastorno depresivo probable. Requiere intervención psicoterapéutica focalizada (Activación Conductual, TCC).';
       } else if (score >= 15 && score <= 19) {
         severity = 'Depresión Moderadamente Severa';
         severityColor = 'orange';
-        interpretation = 'Trastorno depresivo importante. Se recomienda psicoterapia intensiva y posible valoración psiquiátrica.';
+        interpretation = 'Sintomatología depresiva importante con compromiso funcional. Se sugiere psicoterapia intensiva y valoración médica.';
       } else if (score >= 20) {
         severity = 'Depresión Severa';
         severityColor = 'rose';
-        interpretation = 'Afectación funcional grave. Requiere intervención psicoterapéutica inmediata y evaluación médica psiquiátrica.';
+        interpretation = 'Afectación funcional severa. Indicada psicoterapia estructurada inmediata y valoración psiquiátrica.';
       }
 
       return { score, maxScore: 27, severity, severityColor, interpretation, hasCrisisAlert };
@@ -99,14 +104,15 @@ const SCALES_DATA: Record<
   },
 
   GAD7: {
-    name: 'GAD-7 (Escala del Trastorno de Ansiedad Generalizada)',
-    description: 'Herramienta de tamizaje clínico para evaluar síntomas de ansiedad, preocupación y tensión.',
+    name: 'GAD-7 (Escala de Ansiedad Generalizada)',
+    description: 'Herramienta clínica estandarizada para evaluar la severidad de síntomas de ansiedad, preocupación incontrolable y tensión.',
     instructions: 'Durante las últimas 2 semanas, ¿con qué frecuencia se ha sentido molesto/a por los siguientes problemas?',
+    category: 'ANXIETY',
     options: [
       { label: 'Nunca (0)', value: 0 },
       { label: 'Varios días (1)', value: 1 },
-      { label: 'Más de la mitad de los días (2)', value: 2 },
-      { label: 'Casi todos los días (3)', value: 3 },
+      { label: 'Más de la mitad (2)', value: 2 },
+      { label: 'Casi a diario (3)', value: 3 },
     ],
     questions: [
       '1. Sentirse nervioso/a, intranquilo/a o con los nervios de punta',
@@ -130,25 +136,139 @@ const SCALES_DATA: Record<
       if (score >= 5 && score <= 9) {
         severity = 'Ansiedad Leve';
         severityColor = 'emerald';
-        interpretation = 'Sintomatología ansiosa leve. Recomendadas técnicas de relajación y respiración diafragmática.';
+        interpretation = 'Sintomatología ansiosa leve. Recomendadas técnicas de regulación emocional, respiración y relajación muscular.';
       } else if (score >= 10 && score <= 14) {
         severity = 'Ansiedad Moderada';
         severityColor = 'amber';
-        interpretation = 'Presencia de trastorno de ansiedad probable. Indicada intervención en reestructuración cognitiva y exposición.';
+        interpretation = 'Trastorno de ansiedad generalizada probable. Indicada reestructuración cognitiva, desensibilización y manejo de rumiación.';
       } else if (score >= 15) {
         severity = 'Ansiedad Severa';
         severityColor = 'rose';
-        interpretation = 'Ansiedad invalidante con alta respuesta somática. Tratamiento psicoterapéutico prioritario.';
+        interpretation = 'Ansiedad severa e invalidante con alta somatización. Tratamiento psicoterapéutico prioritario.';
       }
 
       return { score, maxScore: 21, severity, severityColor, interpretation };
     },
   },
 
+  BAI: {
+    name: 'BAI (Inventario de Ansiedad de Beck)',
+    description: 'Cuestionario de 21 reactivos diseñado por Aaron Beck para discriminar síntomas somáticos, cognitivos y fisiológicos de ansiedad.',
+    instructions: 'Indique en qué grado se ha sentido molesto/a por cada síntoma durante la última semana:',
+    category: 'ANXIETY',
+    options: [
+      { label: 'En absoluto (0)', value: 0 },
+      { label: 'Levemente (1)', value: 1 },
+      { label: 'Moderado (2)', value: 2 },
+      { label: 'Severo (3)', value: 3 },
+    ],
+    questions: [
+      '1. Entumecimiento u hormigueo en el cuerpo',
+      '2. Sensación de calor o sofocación',
+      '3. Temblores o debilidad en las piernas',
+      '4. Incapacidad para relajarse o calmarse',
+      '5. Miedo a que suceda lo peor',
+      '6. Mareo, inestabilidad o aturdimiento',
+      '7. Palpitaciones, latidos fuertes o taquicardia',
+      '8. Inestabilidad o temblor físico generalizado',
+      '9. Terror, pánico o miedo repentino e inexplicable',
+      '10. Nerviosismo o inquietud interior constante',
+      '11. Sensación de ahogo o atragantamiento',
+      '12. Manos temblorosas',
+      '13. Temblores o sacudidas corporales',
+      '14. Miedo a perder el control o volverse loco/a',
+      '15. Dificultad para respirar (disnea)',
+      '16. Miedo a morir',
+      '17. Sobresalto o asustarse fácilmente',
+      '18. Molestias estomacales, náuseas o indigestión',
+      '19. Sensación de desmayo o desvanecimiento',
+      '20. Rubor o enrojecimiento facial repentino',
+      '21. Sudoración fría o excesiva no debida al calor',
+    ],
+    calculateResult: (answers) => {
+      let score = 0;
+      for (let i = 0; i < 21; i++) {
+        score += answers[i] || 0;
+      }
+
+      let severity = 'Ansiedad Baja / Normal';
+      let severityColor: 'emerald' | 'amber' | 'orange' | 'rose' | 'indigo' = 'emerald';
+      let interpretation = 'El paciente presenta niveles normales o basales de respuesta ansiosa.';
+
+      if (score >= 22 && score <= 35) {
+        severity = 'Ansiedad Moderada';
+        severityColor = 'amber';
+        interpretation = 'Presencia significativa de activación fisiológica y somática. Requiere intervención en técnicas de afrontamiento y exposición.';
+      } else if (score >= 36) {
+        severity = 'Ansiedad Severa';
+        severityColor = 'rose';
+        interpretation = 'Nivel muy elevado de ansiedad con afectación somática grave (posible trastorno de pánico o crisis de angustia).';
+      }
+
+      return { score, maxScore: 63, severity, severityColor, interpretation };
+    },
+  },
+
+  PSS10: {
+    name: 'PSS-10 (Escala de Estrés Percibido de Cohen)',
+    description: 'Medida clásica de 10 ítems para evaluar el grado en que las situaciones de la vida son valoradas como impredecibles, incontrolables o sobrecargadas.',
+    instructions: 'En el último mes, ¿con qué frecuencia ha sentido o pensado lo siguiente?',
+    category: 'STRESS',
+    options: [
+      { label: 'Nunca (0)', value: 0 },
+      { label: 'Casi nunca (1)', value: 1 },
+      { label: 'A veces (2)', value: 2 },
+      { label: 'A menudo (3)', value: 3 },
+      { label: 'Muy a menudo (4)', value: 4 },
+    ],
+    questions: [
+      '1. ¿Con qué frecuencia ha estado afectado por algo que ocurrió inesperadamente?',
+      '2. ¿Con qué frecuencia ha sentido que era incapaz de controlar las cosas importantes en su vida?',
+      '3. ¿Con qué frecuencia se ha sentido nervioso/a o estresado/a?',
+      '4. ¿Con qué frecuencia ha manejado con éxito los pequeños problemas cotidianos? (*Inverso)',
+      '5. ¿Con qué frecuencia ha sentido que afrontaba efectivamente los cambios en su vida? (*Inverso)',
+      '6. ¿Con qué frecuencia ha estado seguro/a sobre su capacidad para manejar problemas personales? (*Inverso)',
+      '7. ¿Con qué frecuencia ha sentido que las cosas le iban bien? (*Inverso)',
+      '8. ¿Con qué frecuencia ha sentido que no podía afrontar todas las cosas que tenía que hacer?',
+      '9. ¿Con qué frecuencia ha podido controlar las dificultades de su vida? (*Inverso)',
+      '10. ¿Con qué frecuencia ha sentido que tenía todo bajo control? (*Inverso)',
+    ],
+    calculateResult: (answers) => {
+      let score = 0;
+      const reverseItems = [3, 4, 5, 6, 8, 9]; // Índices 0-based de ítems inversos
+
+      for (let i = 0; i < 10; i++) {
+        const val = answers[i] || 0;
+        if (reverseItems.includes(i)) {
+          score += 4 - val; // 0->4, 1->3, 2->2, 3->1, 4->0
+        } else {
+          score += val;
+        }
+      }
+
+      let severity = 'Estrés Bajo / Adaptativo';
+      let severityColor: 'emerald' | 'amber' | 'orange' | 'rose' | 'indigo' = 'emerald';
+      let interpretation = 'Capacidad adecuada de autorregulación y control percibido frente a las demandas ambientales.';
+
+      if (score >= 14 && score <= 26) {
+        severity = 'Estrés Moderado';
+        severityColor = 'amber';
+        interpretation = 'Nivel de estrés moderado. Se recomienda entrenamiento en habilidades de afrontamiento, asertividad y gestión del tiempo.';
+      } else if (score >= 27) {
+        severity = 'Estrés Alto / Sobrecarga Crónica';
+        severityColor = 'rose';
+        interpretation = 'Sobrecarga alostática severa con riesgo de somatización y desgaste psicofisiológico. Intervención prioritaria en reducción de estresores.';
+      }
+
+      return { score, maxScore: 40, severity, severityColor, interpretation };
+    },
+  },
+
   ROSENBERG: {
     name: 'Escala de Autoestima de Rosenberg (RSES)',
-    description: 'Cuestionario de 10 ítems para evaluar el nivel de autoestima global y autoaceptación.',
+    description: 'Cuestionario psicométrico de 10 ítems para evaluar el nivel de autoestima global, autovalía y autoaceptación.',
     instructions: 'Indique su grado de acuerdo con cada una de las siguientes afirmaciones:',
+    category: 'SELF_ESTEEM',
     options: [
       { label: 'Muy en desacuerdo (1)', value: 1 },
       { label: 'En desacuerdo (2)', value: 2 },
@@ -158,14 +278,14 @@ const SCALES_DATA: Record<
     questions: [
       '1. Siento que soy una persona digna de aprecio, al menos en igual medida que los demás',
       '2. Siento que tengo cualidades positivas',
-      '3. En general, me inclino a sentir que soy un/a fracasado/a (*ítem inverso)',
+      '3. En general, me inclino a sentir que soy un/a fracasado/a (*Inverso)',
       '4. Soy capaz de hacer las cosas tan bien como la mayoría de la gente',
-      '5. Siento que no tengo mucho de lo que enorgullecerme (*ítem inverso)',
+      '5. Siento que no tengo mucho de lo que enorgullecerme (*Inverso)',
       '6. Adopto una actitud positiva hacia mí mismo/a',
       '7. En general, me siento satisfecho/a conmigo mismo/a',
-      '8. Desearía tener más respeto por mí mismo/a (*ítem inverso)',
-      '9. A veces me siento ciertamente inútil (*ítem inverso)',
-      '10. A veces pienso que no soy bueno/a para nada (*ítem inverso)',
+      '8. Desearía tener más respeto por mí mismo/a (*Inverso)',
+      '9. A veces me siento ciertamente inútil (*Inverso)',
+      '10. A veces pienso que no soy bueno/a para nada (*Inverso)',
     ],
     calculateResult: (answers) => {
       let score = 0;
@@ -182,7 +302,7 @@ const SCALES_DATA: Record<
 
       let severity = 'Autoestima Baja';
       let severityColor: 'emerald' | 'amber' | 'orange' | 'rose' | 'indigo' = 'amber';
-      let interpretation = 'Autoestima disminuida con autocrítica elevada. Recomendado trabajo en autocompasión y autovalía.';
+      let interpretation = 'Autoestima disminuida con autocrítica y sentimiento de minusvalía elevados. Recomendado trabajo en autocompasión y autovalía.';
 
       if (score >= 26 && score <= 29) {
         severity = 'Autoestima Media / Adecuada';
@@ -198,10 +318,117 @@ const SCALES_DATA: Record<
     },
   },
 
+  SWLS: {
+    name: 'SWLS (Escala de Satisfacción con la Vida - Diener)',
+    description: 'Instrumento de 5 ítems que evalúa el componente cognitivo del bienestar subjetivo y la satisfacción vital global.',
+    instructions: 'Indique su grado de acuerdo con las siguientes afirmaciones sobre su vida:',
+    category: 'WELLBEING',
+    options: [
+      { label: 'Muy en desacuerdo (1)', value: 1 },
+      { label: 'En desacuerdo (2)', value: 2 },
+      { label: 'Ligeramente en desacuerdo (3)', value: 3 },
+      { label: 'Neutral (4)', value: 4 },
+      { label: 'Ligeramente de acuerdo (5)', value: 5 },
+      { label: 'De acuerdo (6)', value: 6 },
+      { label: 'Muy de acuerdo (7)', value: 7 },
+    ],
+    questions: [
+      '1. En la mayoría de los aspectos, mi vida es como yo quiero que sea',
+      '2. Las circunstancias de mi vida son excelentes',
+      '3. Estoy completamente satisfecho/a con mi vida',
+      '4. Hasta ahora, he conseguido las cosas que son importantes en mi vida',
+      '5. Si pudiera vivir mi vida de nuevo, no cambiaría casi nada',
+    ],
+    calculateResult: (answers) => {
+      let score = 0;
+      for (let i = 0; i < 5; i++) {
+        score += answers[i] || 1;
+      }
+
+      let severity = 'Insatisfacción Severa';
+      let severityColor: 'emerald' | 'amber' | 'orange' | 'rose' | 'indigo' = 'rose';
+      let interpretation = 'Sentimiento marcado de descontento vital. Explorar áreas de insatisfacción y metas personales.';
+
+      if (score >= 10 && score <= 14) {
+        severity = 'Insatisfecho/a con la Vida';
+        severityColor = 'orange';
+        interpretation = 'Nivel bajo de satisfacción. El paciente percibe brechas significativas entre sus expectativas y su realidad.';
+      } else if (score >= 15 && score <= 19) {
+        severity = 'Ligeramente por debajo del promedio';
+        severityColor = 'amber';
+        interpretation = 'Satisfacción levemente disminuida con áreas específicas susceptibles de mejora.';
+      } else if (score >= 20 && score <= 24) {
+        severity = 'Satisfacción Promedio';
+        severityColor = 'indigo';
+        interpretation = 'Nivel de satisfacción vital promedio y funcional.';
+      } else if (score >= 25 && score <= 29) {
+        severity = 'Satisfecho/a con la Vida';
+        severityColor = 'emerald';
+        interpretation = 'El paciente evalúa su vida positivamente en la mayoría de los dominios.';
+      } else if (score >= 30) {
+        severity = 'Altamente Satisfecho/a';
+        severityColor = 'emerald';
+        interpretation = 'Nivel óptimo de bienestar subjetivo y autorrealización personal.';
+      }
+
+      return { score, maxScore: 35, severity, severityColor, interpretation };
+    },
+  },
+
+  BURNOUT_MBI: {
+    name: 'MBI-HSS (Escala de Burnout y Desgaste Emocional)',
+    description: 'Evaluación psicométrica de 9 reactivos focalizada en agotamiento emocional, sobrecarga laboral/académica y despersonalización.',
+    instructions: '¿Con qué frecuencia experimenta cada una de las siguientes sensaciones con respecto a su trabajo o rutina?',
+    category: 'BURNOUT',
+    options: [
+      { label: 'Nunca (0)', value: 0 },
+      { label: 'Pocas veces al año (1)', value: 1 },
+      { label: 'Una vez al mes (2)', value: 2 },
+      { label: 'Pocas veces al mes (3)', value: 3 },
+      { label: 'Una vez por semana (4)', value: 4 },
+      { label: 'Pocas veces por semana (5)', value: 5 },
+      { label: 'Diariamente (6)', value: 6 },
+    ],
+    questions: [
+      '1. Me siento emocionalmente agotado/a por mi trabajo o responsabilidades diarias',
+      '2. Me siento cansado/a al levantarme por la mañana y tener que enfrentar otra jornada',
+      '3. Trabajar o interactuar todo el día con personas me produce tensión y fatiga mental',
+      '4. Me siento frustrado/a o desmotivado/a por mis tareas cotidianas',
+      '5. Siento que estoy trabajando demasiado y al límite de mis capacidades',
+      '6. Me siento "quemado/a" o exhausto/a por mi rutina actual',
+      '7. Siento que me he vuelto más insensible o distante con las personas a mi alrededor',
+      '8. Me preocupa que este ritmo de vida me esté endureciendo emocionalmente',
+      '9. Siento que me cuesta empatizar con las demandas y quejas de los demás',
+    ],
+    calculateResult: (answers) => {
+      let score = 0;
+      for (let i = 0; i < 9; i++) {
+        score += answers[i] || 0;
+      }
+
+      let severity = 'Bajo / Sin Desgaste Relevante';
+      let severityColor: 'emerald' | 'amber' | 'orange' | 'rose' | 'indigo' = 'emerald';
+      let interpretation = 'Niveles saludables de energía y compromiso con sus actividades cotidianas.';
+
+      if (score >= 19 && score <= 29) {
+        severity = 'Riesgo Moderado de Burnout';
+        severityColor = 'amber';
+        interpretation = 'Presencia de fatiga acumulada y desmotivación. Recomendado establecimiento de límites laborales y espacios de desconexión.';
+      } else if (score >= 30) {
+        severity = 'Síndrome de Burnout Severo';
+        severityColor = 'rose';
+        interpretation = 'Agotamiento psicofísico severo y despersonalización. Requiere intervención inmediata en balance vida-trabajo y prevención de colapso.';
+      }
+
+      return { score, maxScore: 54, severity, severityColor, interpretation };
+    },
+  },
+
   SUICIDE_RISK: {
     name: 'Protocolo de Detección de Riesgo de Crisis y Conducta Suicida',
-    description: 'Exploración clínica estructurada de factores de riesgo, ideación, intención y factores protectores.',
-    instructions: 'Marque la presencia de cada factor observado durante la entrevista clínica:',
+    description: 'Exploración clínica estructurada de factores de riesgo, ideación, intención, letalidad y factores protectores.',
+    instructions: 'Marque la presencia e intensidad de cada factor observado durante la entrevista clínica:',
+    category: 'CRISIS',
     options: [
       { label: 'Ausente (0)', value: 0 },
       { label: 'Leve / Dudoso (1)', value: 1 },
@@ -211,10 +438,10 @@ const SCALES_DATA: Record<
     questions: [
       '1. Ideación de muerte pasiva ("desearía dormirme y no despertar")',
       '2. Ideación activa ("he pensado en cómo quitarme la vida")',
-      '3. Plan estructurado / Método disponible',
-      '4. Antecedentes de intentos previos o conductas autolesivas',
-      '5. Sentimientos intensos de desesperanza o carga para los demás',
-      '6. Ausencia de red de apoyo familiar o social continente',
+      '3. Plan estructurado / Método disponible y accesible',
+      '4. Antecedentes de intentos previos o conductas autolesivas repetitivas',
+      '5. Sentimientos intensos de desesperanza, dolor insoportable o carga para los demás',
+      '6. Ausencia o ruptura de red de apoyo familiar y social continente',
     ],
     calculateResult: (answers) => {
       let score = 0;
@@ -226,26 +453,34 @@ const SCALES_DATA: Record<
 
       let severity = 'Riesgo Bajo / Nulo';
       let severityColor: 'emerald' | 'amber' | 'orange' | 'rose' | 'indigo' = 'emerald';
-      let interpretation = 'Sin indicadores de riesgo inminente. Mantener alianza terapéutica y monitoreo.';
+      let interpretation = 'Sin indicadores de riesgo inminente. Mantener alianza terapéutica y monitoreo regular.';
 
       if (score >= 4 && score <= 8) {
         severity = 'Riesgo Moderado';
         severityColor = 'amber';
-        interpretation = 'Presencia de ideación. Establecer Contrato de No Agresión / Plan de Seguridad de Crisis y contactar red de apoyo.';
+        interpretation = 'Presencia de ideación. Establecer Contrato de No Agresión / Plan de Seguridad de Crisis, involucrar red de apoyo y programar citas frecuentes.';
       } else if (score >= 9 || planScore >= 2 || ideationActive >= 3) {
         severity = 'Riesgo Alto / Crítico';
         severityColor = 'rose';
-        interpretation = '🚨 ALERTA CLÍNICA: Riesgo inminente. Activar protocolo de crisis, acompañamiento permanente por familiares y derivación médica/urgencias.';
+        interpretation = '🚨 ALERTA CLÍNICA: Riesgo inminente. Activar protocolo de crisis, acompañamiento permanente 24/7 por familiares y derivación médica/urgencias.';
       }
 
-      return { score, maxScore: 18, severity, severityColor, interpretation, hasCrisisAlert: score >= 9 || planScore >= 2 };
+      return {
+        score,
+        maxScore: 18,
+        severity,
+        severityColor,
+        interpretation,
+        hasCrisisAlert: score >= 9 || planScore >= 2 || ideationActive >= 2,
+      };
     },
   },
 
   CUSTOM: {
     name: 'Evaluación Personalizada',
-    description: 'Registro libre',
+    description: 'Registro libre para escalas psicométricas complementarias.',
     instructions: '',
+    category: 'OTHER',
     options: [],
     questions: [],
     calculateResult: () => ({
@@ -326,7 +561,7 @@ export const PsychometricTestModal: React.FC<PsychometricTestModalProps> = ({
               <BrainCircuit className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-bold">Batería de Tests Psicométricos</h3>
+              <h3 className="text-base font-bold">Batería de Tests Psicométricos Estandarizados</h3>
               <p className="text-xs text-slate-300">
                 Paciente: <span className="text-indigo-300 font-semibold">{patientName}</span>
               </p>
@@ -334,13 +569,13 @@ export const PsychometricTestModal: React.FC<PsychometricTestModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors"
+            className="text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Selector de Escalas */}
+        {/* Selector de Escalas con Píldoras Estilizadas */}
         <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex items-center gap-2 overflow-x-auto">
           <button
             type="button"
@@ -366,6 +601,28 @@ export const PsychometricTestModal: React.FC<PsychometricTestModalProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => handleSelectScale('BAI')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              selectedScale === 'BAI'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            BAI (Ansiedad Beck)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectScale('PSS10')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              selectedScale === 'PSS10'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            PSS-10 (Estrés)
+          </button>
+          <button
+            type="button"
             onClick={() => handleSelectScale('ROSENBERG')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               selectedScale === 'ROSENBERG'
@@ -377,6 +634,28 @@ export const PsychometricTestModal: React.FC<PsychometricTestModalProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => handleSelectScale('SWLS')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              selectedScale === 'SWLS'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            SWLS (Satisfacción Vital)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectScale('BURNOUT_MBI')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              selectedScale === 'BURNOUT_MBI'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50'
+            }`}
+          >
+            MBI (Burnout)
+          </button>
+          <button
+            type="button"
             onClick={() => handleSelectScale('SUICIDE_RISK')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               selectedScale === 'SUICIDE_RISK'
@@ -384,7 +663,7 @@ export const PsychometricTestModal: React.FC<PsychometricTestModalProps> = ({
                 : 'bg-white text-rose-700 border border-rose-200 hover:bg-rose-50'
             }`}
           >
-            ⚠️ Riesgo / Crisis
+            ⚠️ Protocolo de Crisis
           </button>
         </div>
 
@@ -406,13 +685,13 @@ export const PsychometricTestModal: React.FC<PsychometricTestModalProps> = ({
                 }`}
               >
                 <p className="font-bold text-slate-800 text-xs sm:text-sm mb-2">{question}</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="flex flex-wrap gap-2">
                   {currentScaleData.options.map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
                       onClick={() => handleAnswerChange(qIdx, opt.value)}
-                      className={`p-2 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer ${
+                      className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer flex-1 min-w-[110px] ${
                         answers[qIdx] === opt.value
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-bold'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -473,7 +752,7 @@ export const PsychometricTestModal: React.FC<PsychometricTestModalProps> = ({
               Observaciones y Contexto Clínico del Terapeuta (Opcional)
             </label>
             <Textarea
-              placeholder="Ej: Paciente refiere mayor reactividad emocional tras evento estresante laboral..."
+              placeholder="Ej: Paciente refiere mayor reactividad emocional tras evento estresante laboral reciente..."
               value={clinicalNotes}
               onChange={(e) => setClinicalNotes(e.target.value)}
               rows={2}

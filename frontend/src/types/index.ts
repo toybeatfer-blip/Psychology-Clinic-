@@ -118,9 +118,18 @@ export interface InformedConsent {
 }
 
 // -------------------------------------------------------------
-// Tests Psicométricos Auto-Calificables
+// Tests Psicométricos Auto-Calificables Estandarizados
 // -------------------------------------------------------------
-export type PsychometricScaleType = 'PHQ9' | 'GAD7' | 'ROSENBERG' | 'SUICIDE_RISK' | 'CUSTOM';
+export type PsychometricScaleType =
+  | 'PHQ9'
+  | 'GAD7'
+  | 'BAI'
+  | 'PSS10'
+  | 'ROSENBERG'
+  | 'SWLS'
+  | 'BURNOUT_MBI'
+  | 'SUICIDE_RISK'
+  | 'CUSTOM';
 
 export interface PsychometricTest {
   id: string;
