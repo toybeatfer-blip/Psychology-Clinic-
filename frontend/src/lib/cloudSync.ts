@@ -320,6 +320,7 @@ export async function pushToGitHubVault(state: MasterCloudState, maxRetries = 3)
       const body: any = {
         message: `feat: Universal cross-device sync update (${mergedToPush.users?.length || 0} users, ${Object.keys(mergedToPush.tenants || {}).length} tenants)`,
         content: base64,
+        branch: 'main',
       };
       if (sha) body.sha = sha;
 
@@ -441,49 +442,40 @@ function mergeStatesDirect(local: MasterCloudState, remote: MasterCloudState): M
 }
 
 // -------------------------------------------------------------
-// CANAL 2: SERVIDOR EXPRESS EN RENDER (/api/cloud-sync)
+// CANAL 2: GESTOR CENTRAL DE NUBE (GITHUB VAULT PRIMARIO)
 // -------------------------------------------------------------
 export async function fetchMasterCloudState(): Promise<MasterCloudState | null> {
-  const baseUrl = getBackendBaseUrl();
-  const candidateUrls = [
-    `${baseUrl}/cloud-sync`,
-    '/api/cloud-sync',
-    'http://localhost:4000/api/cloud-sync',
-  ];
-
-  const testedUrls = new Set<string>();
-
-  for (const url of candidateUrls) {
-    if (testedUrls.has(url)) continue;
-    testedUrls.add(url);
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const body = await res.json();
-        const stateData = body?.data || body;
-        if (stateData && Array.isArray(stateData.users)) {
-          return stateData as MasterCloudState;
-        }
-      }
-    } catch (err) {}
+  // 1. Canal Directo e Instantáneo: Bóveda Permanente en GitHub
+  const vaultState = await fetchFromGitHubVault();
+  if (vaultState && Array.isArray(vaultState.users)) {
+    return vaultState;
   }
 
-  // Fallback directo e infalible a la Bóveda de GitHub
-  const vaultState = await fetchFromGitHubVault();
-  if (vaultState) return vaultState;
+  // 2. Canal Secundario: Endpoints locales o proxy
+  try {
+    const baseUrl = getBackendBaseUrl();
+    const candidateUrls = [`${baseUrl}/cloud-sync`, '/api/cloud-sync'];
+    for (const url of candidateUrls) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const res = await fetch(url, {
+          headers: { 'Accept': 'application/json' },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const body = await res.json();
+          const stateData = body?.data || body;
+          if (stateData && Array.isArray(stateData.users)) {
+            return stateData as MasterCloudState;
+          }
+        }
+      } catch {}
+    }
+  } catch {}
 
   return null;
 }
@@ -494,48 +486,23 @@ export async function pushMasterCloudState(state: MasterCloudState): Promise<boo
     lastSync: new Date().toISOString(),
   };
 
-  let backendSuccess = false;
-  const baseUrl = getBackendBaseUrl();
-  const candidateUrls = [
-    `${baseUrl}/cloud-sync`,
-    '/api/cloud-sync',
-    'http://localhost:4000/api/cloud-sync',
-  ];
-
-  const testedUrls = new Set<string>();
-
-  for (const url of candidateUrls) {
-    if (testedUrls.has(url)) continue;
-    testedUrls.add(url);
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          data: payload,
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        backendSuccess = true;
-        break;
-      }
-    } catch (err) {}
-  }
-
-  // CANAL PARALELO UNIVERSAL: Guardar siempre en GitHub Vault 24/7 sin reinicios
+  // 1. Guardar de forma directa e infalible en la Bóveda de GitHub
   const vaultSuccess = await pushToGitHubVault(payload);
 
-  return backendSuccess || vaultSuccess;
+  // 2. Notificación en segundo plano no bloqueante al backend si existe
+  try {
+    const baseUrl = getBackendBaseUrl();
+    fetch(`${baseUrl}/cloud-sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ data: payload }),
+    }).catch(() => {});
+  } catch {}
+
+  return vaultSuccess;
 }
 
 // -------------------------------------------------------------
@@ -780,10 +747,30 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
     const cloudTenants = cloudState?.tenants || {};
     const mergedTenants: Record<string, CloudTenantData> = {};
 
-    mergedUsers.forEach((u) => {
-      if (!u || !u.id) return;
-      const canonicalId = u.id;
-      const emailKey = (u.email || '').toLowerCase();
+    const allTenantIds = new Set<string>();
+    Object.keys(cloudTenants).forEach((tId) => allTenantIds.add(tId));
+    mergedUsers.forEach((u) => u && u.id && allTenantIds.add(u.id));
+
+    // Escanear todas las llaves en localStorage para no omitir ningún tenant o consultorio local
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) {
+        if (k.startsWith('psychocare_db_patients_')) {
+          allTenantIds.add(k.replace('psychocare_db_patients_', ''));
+        } else if (k.startsWith('psychocare_db_appointments_')) {
+          allTenantIds.add(k.replace('psychocare_db_appointments_', ''));
+        } else if (k.startsWith('psychocare_db_notes_')) {
+          allTenantIds.add(k.replace('psychocare_db_notes_', ''));
+        } else if (k.startsWith('psychocare_clinic_settings_')) {
+          allTenantIds.add(k.replace('psychocare_clinic_settings_', ''));
+        }
+      }
+    }
+
+    allTenantIds.forEach((canonicalId) => {
+      if (!canonicalId) return;
+      const u = mergedUsers.find((user) => user && user.id === canonicalId);
+      const emailKey = (u?.email || '').toLowerCase();
       const cleanEmail = emailKey.replace(/[^a-z0-9]/g, '_');
       const pKey = `psychocare_db_patients_${canonicalId}`;
       const aKey = `psychocare_db_appointments_${canonicalId}`;
@@ -793,11 +780,11 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
 
       const matchingCloudTenants: CloudTenantData[] = [];
       if (cloudTenants[canonicalId]) matchingCloudTenants.push(cloudTenants[canonicalId]);
-      if (u.id && u.id !== canonicalId && cloudTenants[u.id]) matchingCloudTenants.push(cloudTenants[u.id]);
+      if (u?.id && u.id !== canonicalId && cloudTenants[u.id]) matchingCloudTenants.push(cloudTenants[u.id]);
 
       Object.keys(cloudTenants).forEach((k) => {
-        if (k !== canonicalId && k !== u.id) {
-          if (k.includes(cleanEmail) || k.startsWith('therapist-')) {
+        if (k !== canonicalId && k !== u?.id) {
+          if ((cleanEmail && k.includes(cleanEmail)) || k.startsWith('therapist-')) {
             const t = cloudTenants[k];
             if (t && (t.patients?.length || t.appointments?.length || t.notes?.length)) {
               matchingCloudTenants.push(t);
@@ -1043,7 +1030,7 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
       });
 
       // Última actividad
-      let lastActivity = u.createdAt || new Date().toISOString();
+      let lastActivity = u?.createdAt || new Date().toISOString();
       finalPatients.forEach((p) => {
         if (p.updatedAt && new Date(p.updatedAt).getTime() > new Date(lastActivity).getTime()) {
           lastActivity = p.updatedAt;
@@ -1091,7 +1078,7 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
     };
 
     // 5. SUBIR ESTADO FUSIONADO (BIDIRECCIONAL Y RESCATE AUTOMÁTICO)
-    if (mergedUsers.length > 0) {
+    if (mergedUsers.length > 0 || Object.keys(mergedTenants).length > 0) {
       await pushMasterCloudState(consolidatedMasterState);
     }
 
