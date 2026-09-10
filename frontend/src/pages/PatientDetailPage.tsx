@@ -69,20 +69,44 @@ export const PatientDetailPage: React.FC = () => {
   const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
 
-  const fetchPatientDetail = async () => {
+  const fetchPatientDetail = async (silent: boolean = false) => {
     if (!id) return;
+    if (!silent) setLoading(true);
     try {
       const res = await api.get<{ success: boolean; data: Patient }>(`/patients/${id}`);
       setPatient(res.data);
     } catch (error) {
       console.error('Error al cargar expediente del paciente:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPatientDetail();
+    fetchPatientDetail(false);
+
+    const interval = setInterval(() => {
+      fetchPatientDetail(true);
+    }, 6000);
+
+    const handleFocus = () => {
+      fetchPatientDetail(true);
+    };
+
+    const handleCloudSynced = () => {
+      fetchPatientDetail(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('psychocare_cloud_synced', handleCloudSynced);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('psychocare_cloud_synced', handleCloudSynced);
+    };
   }, [id]);
 
   const handleCreateNote = () => {

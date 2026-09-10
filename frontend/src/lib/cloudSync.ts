@@ -285,46 +285,159 @@ export async function fetchFromGitHubVault(): Promise<MasterCloudState | null> {
   return null;
 }
 
-export async function pushToGitHubVault(state: MasterCloudState): Promise<boolean> {
-  try {
-    let sha: string | null = null;
+export async function pushToGitHubVault(state: MasterCloudState, maxRetries = 3): Promise<boolean> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const getRes = await fetch(`${GH_API_URL}?ref=main&_t=${Date.now()}`, {
+      let sha: string | null = null;
+      let remoteState: MasterCloudState | null = null;
+
+      try {
+        const getRes = await fetch(`${GH_API_URL}?ref=main&_t=${Date.now()}`, {
+          headers: {
+            'Authorization': `Bearer ${getGhToken()}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Cache-Control': 'no-cache',
+          },
+        });
+        if (getRes.ok) {
+          const getJson = await getRes.json();
+          if (getJson && getJson.sha) sha = getJson.sha;
+          if (getJson && getJson.content) {
+            try {
+              const remoteStr = decodeBase64Utf8(getJson.content);
+              remoteState = JSON.parse(remoteStr);
+            } catch {}
+          }
+        }
+      } catch (e) {}
+
+      // Si existe un estado remoto en GitHub, fusionar inteligentemente sin perder cambios
+      const mergedToPush: MasterCloudState = remoteState ? mergeStatesDirect(state, remoteState) : state;
+
+      const jsonStr = JSON.stringify(mergedToPush, null, 2);
+      const base64 = encodeBase64Utf8(jsonStr);
+
+      const body: any = {
+        message: `feat: Universal cross-device sync update (${mergedToPush.users?.length || 0} users, ${Object.keys(mergedToPush.tenants || {}).length} tenants)`,
+        content: base64,
+      };
+      if (sha) body.sha = sha;
+
+      const putRes = await fetch(GH_API_URL, {
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${getGhToken()}`,
           'Accept': 'application/vnd.github.v3+json',
-          'Cache-Control': 'no-cache'
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (putRes.ok) {
+        return true;
+      }
+
+      if (putRes.status === 409) {
+        // Conflicto de versión/SHA concurrente (otra máquina guardó antes): esperar 250ms y reintentar
+        await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+        continue;
+      }
+
+      return false;
+    } catch (err) {
+      if (attempt === maxRetries - 1) return false;
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+    }
+  }
+  return false;
+}
+
+function mergeStatesDirect(local: MasterCloudState, remote: MasterCloudState): MasterCloudState {
+  const deletedUsers = new Set([...(local.deletedUserIds || []), ...(remote.deletedUserIds || [])]);
+  const deletedPatients = new Set([...(local.deletedPatientIds || []), ...(remote.deletedPatientIds || [])]);
+
+  // Fusionar usuarios
+  const userMap = new Map<string, CloudStoredUser>();
+  (remote.users || []).forEach((u) => {
+    if (u && u.email && !deletedUsers.has(u.id)) {
+      userMap.set(u.email.toLowerCase(), u);
+    }
+  });
+  (local.users || []).forEach((u) => {
+    if (!u || !u.email || deletedUsers.has(u.id)) return;
+    const key = u.email.toLowerCase();
+    const existing = userMap.get(key);
+    if (!existing) {
+      userMap.set(key, u);
+    } else {
+      const localTime = new Date(u.updatedAt || u.createdAt || 0).getTime();
+      const remoteTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+      userMap.set(key, {
+        ...existing,
+        ...u,
+        id: existing.id || u.id,
+        updatedAt: localTime >= remoteTime ? u.updatedAt : existing.updatedAt,
+      });
+    }
+  });
+
+  // Fusionar tenants
+  const mergedTenants: Record<string, CloudTenantData> = { ...(remote.tenants || {}) };
+  Object.keys(local.tenants || {}).forEach((tId) => {
+    const lTenant = local.tenants[tId];
+    const rTenant = mergedTenants[tId];
+    if (!rTenant) {
+      mergedTenants[tId] = lTenant;
+    } else {
+      const patientMap = new Map<string, Patient>();
+      (rTenant.patients || []).forEach((p) => p && p.id && !deletedPatients.has(p.id) && patientMap.set(p.id, p));
+      (lTenant.patients || []).forEach((p) => {
+        if (!p || !p.id || deletedPatients.has(p.id)) return;
+        const ex = patientMap.get(p.id);
+        if (!ex) {
+          patientMap.set(p.id, p);
+        } else {
+          const lT = new Date(p.updatedAt || p.createdAt || 0).getTime();
+          const rT = new Date(ex.updatedAt || ex.createdAt || 0).getTime();
+          patientMap.set(p.id, lT >= rT ? p : ex);
         }
       });
-      if (getRes.ok) {
-        const getJson = await getRes.json();
-        if (getJson && getJson.sha) sha = getJson.sha;
-      }
-    } catch (e) {}
 
-    const jsonStr = JSON.stringify(state, null, 2);
-    const base64 = encodeBase64Utf8(jsonStr);
+      const apptMap = new Map<string, Appointment>();
+      (rTenant.appointments || []).forEach((a) => a && a.id && apptMap.set(a.id, a));
+      (lTenant.appointments || []).forEach((a) => a && a.id && apptMap.set(a.id, a));
 
-    const body: any = {
-      message: `feat: Universal cross-device sync vault update (${state.users?.length || 0} users, ${Object.keys(state.tenants || {}).length} tenants)`,
-      content: base64
-    };
-    if (sha) body.sha = sha;
+      const noteMap = new Map<string, ClinicalNote>();
+      (rTenant.notes || []).forEach((n) => n && n.id && noteMap.set(n.id, n));
+      (lTenant.notes || []).forEach((n) => n && n.id && noteMap.set(n.id, n));
 
-    const putRes = await fetch(GH_API_URL, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${getGhToken()}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
+      const attMap = new Map<string, Attachment>();
+      (rTenant.attachments || []).forEach((att) => att && att.id && attMap.set(att.id, att));
+      (lTenant.attachments || []).forEach((att) => att && att.id && attMap.set(att.id, att));
 
-    return putRes.ok;
-  } catch (err) {
-    return false;
-  }
+      mergedTenants[tId] = {
+        ...rTenant,
+        ...lTenant,
+        patients: Array.from(patientMap.values()),
+        appointments: Array.from(apptMap.values()),
+        notes: Array.from(noteMap.values()),
+        attachments: Array.from(attMap.values()),
+        tests: { ...(rTenant.tests || {}), ...(lTenant.tests || {}) },
+        consents: { ...(rTenant.consents || {}), ...(lTenant.consents || {}) },
+        evaluations: { ...(rTenant.evaluations || {}), ...(lTenant.evaluations || {}) },
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  });
+
+  return {
+    users: Array.from(userMap.values()),
+    tenants: mergedTenants,
+    deletedUserIds: Array.from(deletedUsers),
+    deletedPatientIds: Array.from(deletedPatients),
+    adminContact: local.adminContact || remote.adminContact,
+    lastSync: new Date().toISOString(),
+  };
 }
 
 // -------------------------------------------------------------
@@ -346,7 +459,7 @@ export async function fetchMasterCloudState(): Promise<MasterCloudState | null> 
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(url, {
         method: 'GET',
         headers: {
@@ -357,7 +470,8 @@ export async function fetchMasterCloudState(): Promise<MasterCloudState | null> 
       });
       clearTimeout(timeoutId);
 
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const body = await res.json();
         const stateData = body?.data || body;
         if (stateData && Array.isArray(stateData.users)) {
@@ -367,7 +481,7 @@ export async function fetchMasterCloudState(): Promise<MasterCloudState | null> 
     } catch (err) {}
   }
 
-  // Fallback directo a la Bóveda de GitHub si Render está suspendido o reiniciando
+  // Fallback directo e infalible a la Bóveda de GitHub
   const vaultState = await fetchFromGitHubVault();
   if (vaultState) return vaultState;
 
@@ -396,7 +510,7 @@ export async function pushMasterCloudState(state: MasterCloudState): Promise<boo
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -410,14 +524,15 @@ export async function pushMasterCloudState(state: MasterCloudState): Promise<boo
       });
       clearTimeout(timeoutId);
 
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         backendSuccess = true;
         break;
       }
     } catch (err) {}
   }
 
-  // CANAL PARALELO: Guardar siempre en GitHub Vault 24/7 sin reinicios
+  // CANAL PARALELO UNIVERSAL: Guardar siempre en GitHub Vault 24/7 sin reinicios
   const vaultSuccess = await pushToGitHubVault(payload);
 
   return backendSuccess || vaultSuccess;

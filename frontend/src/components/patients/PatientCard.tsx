@@ -3,7 +3,7 @@ import { Patient } from '../../types/index';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { calculateAge } from '../../lib/utils';
-import { Phone, Mail, Calendar, FileText, ChevronRight, Edit3, Trash2 } from 'lucide-react';
+import { Phone, Mail, Calendar, FileText, ChevronRight, Edit3, Trash2, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface PatientCardProps {
@@ -63,6 +63,16 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onEdit, onDel
             )}
           </div>
         </div>
+
+        {/* Badge de Consultorio / Terapeuta (Super Admin y Multi-Tenant) */}
+        {(patient.clinicName || patient.therapistName) && (
+          <div className="flex items-center gap-1.5 bg-teal-50/70 border border-teal-100/80 px-2.5 py-1 rounded-lg mb-3 text-[11px] font-semibold text-teal-800">
+            <Building2 className="w-3 h-3 text-teal-600 flex-shrink-0" />
+            <span className="truncate">
+              {patient.clinicName || 'Consultorio'}{patient.therapistName ? ` • ${patient.therapistName}` : ''}
+            </span>
+          </div>
+        )}
 
         {/* Motivo Inicial */}
         <div className="bg-slate-50 rounded-xl p-3 mb-4 border border-slate-100">

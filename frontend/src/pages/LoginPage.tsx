@@ -7,6 +7,7 @@ import {
   getAdminContactInfo,
   fetchPublicCreatorContact,
   AdminContactInfo,
+  syncLocalWithCloud,
 } from '../lib/cloudSync';
 import {
   BrainCircuit,
@@ -43,6 +44,8 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    syncLocalWithCloud().catch(() => {});
+
     fetchPublicCreatorContact().then((info) => {
       if (info) setContactInfo(info);
     });

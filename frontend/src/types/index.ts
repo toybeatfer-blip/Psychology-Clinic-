@@ -190,6 +190,9 @@ export interface Patient {
   clinicalBackground?: string | null;
   currentMedication?: string | null;
   isActive: boolean;
+  therapistName?: string;
+  therapistEmail?: string;
+  clinicName?: string;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -223,6 +226,10 @@ export interface Appointment {
   paymentMethod?: PaymentMethod;
   amountPaid?: number;
   receiptNumber?: string | null;
+  patientName?: string;
+  therapistName?: string;
+  therapistEmail?: string;
+  clinicName?: string;
   createdAt: string;
   updatedAt: string;
   patient?: {

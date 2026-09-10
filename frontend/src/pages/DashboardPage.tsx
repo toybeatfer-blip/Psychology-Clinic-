@@ -53,17 +53,19 @@ export const DashboardPage: React.FC = () => {
       fetchDashboardData(true);
     }, 6000);
 
-    const handleFocus = () => {
+    const handleCloudSynced = () => {
       fetchDashboardData(true);
     };
 
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('psychocare_cloud_synced', handleCloudSynced);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('psychocare_cloud_synced', handleCloudSynced);
     };
   }, [fetchDashboardData]);
 

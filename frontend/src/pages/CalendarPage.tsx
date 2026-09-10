@@ -17,7 +17,8 @@ export const CalendarPage: React.FC = () => {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = async (silent: boolean = false) => {
+    if (!silent) setLoading(true);
     try {
       const [apptsRes, patientsRes] = await Promise.all([
         api.get<{ success: boolean; data: Appointment[] }>('/appointments'),
@@ -28,12 +29,35 @@ export const CalendarPage: React.FC = () => {
     } catch (error) {
       console.error('Error al cargar agenda:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(false);
+
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 6000);
+
+    const handleFocus = () => {
+      fetchData(true);
+    };
+
+    const handleCloudSynced = () => {
+      fetchData(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('psychocare_cloud_synced', handleCloudSynced);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('psychocare_cloud_synced', handleCloudSynced);
+    };
   }, []);
 
   const handleSelectAppointment = (appointment: Appointment) => {

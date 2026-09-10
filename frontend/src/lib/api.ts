@@ -215,6 +215,156 @@ function saveLocalCollection<T>(key: string, data: T[]): void {
   } catch {}
 }
 
+export function getAllTenantsPatients(): Patient[] {
+  const users = getLocalCollection<StoredUserAccount>('psychocare_db_users', []);
+  const patientMap = new Map<string, Patient>();
+
+  // Mapa de userId -> información de consultorio y terapeuta
+  const userMetadata = new Map<string, { therapistName: string; therapistEmail: string; clinicName?: string }>();
+  users.forEach((u) => {
+    let clinicName = '';
+    try {
+      const settRaw = localStorage.getItem(`psychocare_clinic_settings_${u.id}`);
+      if (settRaw) {
+        const sett = JSON.parse(settRaw);
+        if (sett && sett.clinicName) clinicName = sett.clinicName;
+      }
+    } catch {}
+    userMetadata.set(u.id, {
+      therapistName: u.fullName || u.email,
+      therapistEmail: u.email,
+      clinicName: clinicName || undefined,
+    });
+  });
+
+  // 1. Escanear datos bajo llaves directas de cada usuario
+  users.forEach((u) => {
+    const canonicalId = u.id;
+    const cleanEmail = (u.email || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const pKey = `psychocare_db_patients_${canonicalId}`;
+    const raw = localStorage.getItem(pKey);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((p) => {
+            if (p && p.id) {
+              const meta = userMetadata.get(canonicalId) || { therapistName: u.fullName, therapistEmail: u.email };
+              patientMap.set(p.id, {
+                ...p,
+                therapistId: p.therapistId || canonicalId,
+                therapistName: p.therapistName || meta.therapistName,
+                therapistEmail: p.therapistEmail || meta.therapistEmail,
+                clinicName: p.clinicName || meta.clinicName,
+              });
+            }
+          });
+        }
+      } catch {}
+    }
+
+    // Escanear llaves por correo
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('psychocare_db_patients_') && k !== pKey) {
+        if (k.includes(cleanEmail) || (canonicalId.startsWith('therapist-') && k.includes(canonicalId))) {
+          try {
+            const extra = JSON.parse(localStorage.getItem(k) || '[]');
+            if (Array.isArray(extra)) {
+              extra.forEach((p) => {
+                if (p && p.id && !patientMap.has(p.id)) {
+                  const meta = userMetadata.get(canonicalId) || { therapistName: u.fullName, therapistEmail: u.email };
+                  patientMap.set(p.id, {
+                    ...p,
+                    therapistId: p.therapistId || canonicalId,
+                    therapistName: p.therapistName || meta.therapistName,
+                    therapistEmail: p.therapistEmail || meta.therapistEmail,
+                    clinicName: p.clinicName || meta.clinicName,
+                  });
+                }
+              });
+            }
+          } catch {}
+        }
+      }
+    }
+  });
+
+  // 2. Escanear cualquier otra llave de pacientes presente en localStorage
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('psychocare_db_patients_')) {
+      try {
+        const extra = JSON.parse(localStorage.getItem(k) || '[]');
+        if (Array.isArray(extra)) {
+          extra.forEach((p) => {
+            if (p && p.id && !patientMap.has(p.id)) {
+              patientMap.set(p.id, p);
+            }
+          });
+        }
+      } catch {}
+    }
+  }
+
+  return sanitizeCollection(Array.from(patientMap.values()));
+}
+
+export function getAllTenantsAppointments(): Appointment[] {
+  const allPatients = getAllTenantsPatients();
+  const patientMap = new Map<string, Patient>();
+  allPatients.forEach((p) => patientMap.set(p.id, p));
+
+  const apptMap = new Map<string, Appointment>();
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('psychocare_db_appointments_')) {
+      try {
+        const extra = JSON.parse(localStorage.getItem(k) || '[]');
+        if (Array.isArray(extra)) {
+          extra.forEach((a) => {
+            if (a && a.id) {
+              const matchedPatient = a.patientId ? patientMap.get(a.patientId) : undefined;
+              apptMap.set(a.id, {
+                ...a,
+                patient: a.patient || matchedPatient,
+                therapistName: a.therapistName || matchedPatient?.therapistName,
+                therapistEmail: a.therapistEmail || matchedPatient?.therapistEmail,
+                clinicName: a.clinicName || matchedPatient?.clinicName,
+              });
+            }
+          });
+        }
+      } catch {}
+    }
+  }
+
+  return sanitizeCollection(Array.from(apptMap.values()));
+}
+
+export function getAllTenantsNotes(): ClinicalNote[] {
+  const noteMap = new Map<string, ClinicalNote>();
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('psychocare_db_notes_')) {
+      try {
+        const extra = JSON.parse(localStorage.getItem(k) || '[]');
+        if (Array.isArray(extra)) {
+          extra.forEach((n) => {
+            if (n && n.id) {
+              noteMap.set(n.id, n);
+            }
+          });
+        }
+      } catch {}
+    }
+  }
+
+  return sanitizeCollection(Array.from(noteMap.values()));
+}
+
 function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: any): T {
   const clean = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
 
@@ -584,9 +734,10 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
   const attachmentsKey = getScopedKey('psychocare_db_attachments', currentUserId);
 
   if (clean.startsWith('dashboard')) {
-    const patients = getLocalCollection<Patient>(patientsKey, []);
-    const appointments = getLocalCollection<Appointment>(appointmentsKey, []);
-    const notes = getLocalCollection<ClinicalNote>(notesKey, []);
+    const isSuperAdmin = isAdminActive();
+    const patients = isSuperAdmin ? getAllTenantsPatients() : getLocalCollection<Patient>(patientsKey, []);
+    const appointments = isSuperAdmin ? getAllTenantsAppointments() : getLocalCollection<Appointment>(appointmentsKey, []);
+    const notes = isSuperAdmin ? getAllTenantsNotes() : getLocalCollection<ClinicalNote>(notesKey, []);
 
     return {
       success: true,
@@ -657,18 +808,40 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
   }
 
   if (clean.startsWith('patients')) {
-    const patients = getLocalCollection<Patient>(patientsKey, []);
+    const isSuperAdmin = isAdminActive();
+    const patients = isSuperAdmin ? getAllTenantsPatients() : getLocalCollection<Patient>(patientsKey, []);
 
     // GET /patients/:id
     const idMatch = clean.match(/^patients\/([a-zA-Z0-9_-]+)$/);
     if (idMatch && method === 'GET') {
-      const p = patients.find((item) => item.id === idMatch[1]);
+      let p = patients.find((item) => item.id === idMatch[1]);
+      if (!p && !isSuperAdmin) {
+        // Buscar paciente en todos los tenants por si fue creado bajo ID alternativo
+        p = getAllTenantsPatients().find((item) => item.id === idMatch[1]);
+      }
       if (!p) {
         return { success: false, message: 'Paciente no encontrado' } as T;
       }
-      const notes = getLocalCollection<ClinicalNote>(notesKey, []).filter((n) => n.patientId === p.id);
-      const appts = getLocalCollection<Appointment>(appointmentsKey, []).filter((a) => a.patientId === p.id);
-      const atts = getLocalCollection<Attachment>(attachmentsKey, []).filter((att) => att.patientId === p.id);
+      const allNotes = isSuperAdmin ? getAllTenantsNotes() : getLocalCollection<ClinicalNote>(notesKey, []);
+      const notes = allNotes.filter((n) => n.patientId === p!.id);
+
+      const allAppts = isSuperAdmin ? getAllTenantsAppointments() : getLocalCollection<Appointment>(appointmentsKey, []);
+      const appts = allAppts.filter((a) => a.patientId === p!.id);
+
+      let atts = getLocalCollection<Attachment>(attachmentsKey, []).filter((att) => att.patientId === p!.id);
+      if (atts.length === 0 && isSuperAdmin) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('psychocare_db_attachments_')) {
+            try {
+              const list = JSON.parse(localStorage.getItem(k) || '[]');
+              if (Array.isArray(list)) {
+                atts.push(...list.filter((att: Attachment) => att.patientId === p!.id));
+              }
+            } catch {}
+          }
+        }
+      }
 
       const consentRaw = localStorage.getItem(`psychocare_consent_${p.id}`);
       const consent = consentRaw ? JSON.parse(consentRaw) : null;
@@ -694,40 +867,63 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
 
     // POST /patients
     if (clean.startsWith('patients') && !clean.includes('/') && method === 'POST' && body) {
+      const activeUser = getActiveUser();
+      const targetUserId = body.therapistId || currentUserId;
+      const targetKey = getScopedKey('psychocare_db_patients', targetUserId);
       const newPatient: Patient = {
         ...body,
         id: `patient-${Date.now()}`,
-        therapistId: currentUserId,
+        therapistId: targetUserId,
+        therapistName: body.therapistName || activeUser?.fullName,
+        therapistEmail: body.therapistEmail || activeUser?.email,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isActive: true,
       };
-      const currentList = getLocalCollection<Patient>(patientsKey, []);
+      const currentList = getLocalCollection<Patient>(targetKey, []);
       currentList.unshift(newPatient);
-      saveLocalCollection(patientsKey, currentList);
+      saveLocalCollection(targetKey, currentList);
       return { success: true, data: newPatient } as T;
     }
 
     // PUT /patients/:id
     if (idMatch && method === 'PUT' && body) {
-      const currentList = getLocalCollection<Patient>(patientsKey, []);
-      const idx = currentList.findIndex((item) => item.id === idMatch[1]);
-      if (idx !== -1) {
-        currentList[idx] = { ...currentList[idx], ...body, updatedAt: new Date().toISOString() };
-        saveLocalCollection(patientsKey, currentList);
-        return { success: true, data: currentList[idx] } as T;
+      const targetId = idMatch[1];
+      let updatedPatient: Patient | null = null;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('psychocare_db_patients_')) {
+          const list = getLocalCollection<Patient>(k, []);
+          const idx = list.findIndex((item) => item.id === targetId);
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...body, updatedAt: new Date().toISOString() };
+            saveLocalCollection(k, list);
+            updatedPatient = list[idx];
+          }
+        }
+      }
+      if (updatedPatient) {
+        return { success: true, data: updatedPatient } as T;
       }
     }
 
     // DELETE /patients/:id
     if (idMatch && method === 'DELETE') {
-      const currentList = getLocalCollection<Patient>(patientsKey, []);
-      const filtered = currentList.filter((item) => item.id !== idMatch[1]);
-      saveLocalCollection(patientsKey, filtered);
+      const targetId = idMatch[1];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('psychocare_db_patients_')) {
+          const list = getLocalCollection<Patient>(k, []);
+          const filtered = list.filter((item) => item.id !== targetId);
+          if (filtered.length !== list.length) {
+            saveLocalCollection(k, filtered);
+          }
+        }
+      }
       return { success: true, message: 'Paciente eliminado correctamente' } as T;
     }
 
-    // GET /patients (List con filtro de búsqueda)
+    // GET /patients (List con filtro de búsqueda y terapeuta)
     let filteredList = [...patients];
     if (clean.includes('search=')) {
       const searchParam = decodeURIComponent(clean.split('search=')[1].split('&')[0]).toLowerCase();
@@ -735,7 +931,9 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
         (p) =>
           p.fullName.toLowerCase().includes(searchParam) ||
           (p.email && p.email.toLowerCase().includes(searchParam)) ||
-          (p.phone && p.phone.includes(searchParam))
+          (p.phone && p.phone.includes(searchParam)) ||
+          (p.therapistName && p.therapistName.toLowerCase().includes(searchParam)) ||
+          (p.clinicName && p.clinicName.toLowerCase().includes(searchParam))
       );
     }
     if (clean.includes('isActive=true')) {
@@ -743,11 +941,17 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
     } else if (clean.includes('isActive=false')) {
       filteredList = filteredList.filter((p) => !p.isActive);
     }
+    if (clean.includes('therapistId=')) {
+      const therapistIdParam = decodeURIComponent(clean.split('therapistId=')[1].split('&')[0]);
+      if (therapistIdParam && therapistIdParam !== 'ALL') {
+        filteredList = filteredList.filter((p) => p.therapistId === therapistIdParam);
+      }
+    }
 
     return {
       success: true,
       data: filteredList,
-      pagination: { total: filteredList.length, page: 1, limit: 50, totalPages: 1 },
+      pagination: { total: filteredList.length, page: 1, limit: 100, totalPages: 1 },
     } as T;
   }
 
@@ -755,40 +959,61 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
   // 5. Citas CRUD Aisladas
   // -------------------------------------------------------------
   if (clean.startsWith('appointments')) {
-    const appointments = getLocalCollection<Appointment>(appointmentsKey, []);
-    const patients = getLocalCollection<Patient>(patientsKey, []);
+    const isSuperAdmin = isAdminActive();
+    const appointments = isSuperAdmin ? getAllTenantsAppointments() : getLocalCollection<Appointment>(appointmentsKey, []);
+    const patients = isSuperAdmin ? getAllTenantsPatients() : getLocalCollection<Patient>(patientsKey, []);
     const apptIdMatch = clean.match(/^appointments\/([a-zA-Z0-9_-]+)$/);
 
     if (method === 'POST' && body) {
       const patient = patients.find((p) => p.id === body.patientId);
+      const targetUserId = body.therapistId || patient?.therapistId || currentUserId;
+      const targetApptsKey = getScopedKey('psychocare_db_appointments', targetUserId);
       const newAppt: Appointment = {
         ...body,
         id: `appt-${Date.now()}`,
-        therapistId: currentUserId,
+        therapistId: targetUserId,
         patient,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      const currentList = getLocalCollection<Appointment>(appointmentsKey, []);
+      const currentList = getLocalCollection<Appointment>(targetApptsKey, []);
       currentList.push(newAppt);
-      saveLocalCollection(appointmentsKey, currentList);
+      saveLocalCollection(targetApptsKey, currentList);
       return { success: true, data: newAppt } as T;
     }
 
     if (apptIdMatch && method === 'PUT' && body) {
-      const currentList = getLocalCollection<Appointment>(appointmentsKey, []);
-      const idx = currentList.findIndex((a) => a.id === apptIdMatch[1]);
-      if (idx !== -1) {
-        currentList[idx] = { ...currentList[idx], ...body, updatedAt: new Date().toISOString() };
-        saveLocalCollection(appointmentsKey, currentList);
-        return { success: true, data: currentList[idx] } as T;
+      const targetId = apptIdMatch[1];
+      let updatedAppt: Appointment | null = null;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('psychocare_db_appointments_')) {
+          const list = getLocalCollection<Appointment>(k, []);
+          const idx = list.findIndex((a) => a.id === targetId);
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...body, updatedAt: new Date().toISOString() };
+            saveLocalCollection(k, list);
+            updatedAppt = list[idx];
+          }
+        }
+      }
+      if (updatedAppt) {
+        return { success: true, data: updatedAppt } as T;
       }
     }
 
     if (apptIdMatch && method === 'DELETE') {
-      const currentList = getLocalCollection<Appointment>(appointmentsKey, []);
-      const filtered = currentList.filter((a) => a.id !== apptIdMatch[1]);
-      saveLocalCollection(appointmentsKey, filtered);
+      const targetId = apptIdMatch[1];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('psychocare_db_appointments_')) {
+          const list = getLocalCollection<Appointment>(k, []);
+          const filtered = list.filter((a) => a.id !== targetId);
+          if (filtered.length !== list.length) {
+            saveLocalCollection(k, filtered);
+          }
+        }
+      }
       return { success: true, message: 'Cita eliminada correctamente' } as T;
     }
 
@@ -799,39 +1024,60 @@ function handleMockRequest<T>(endpoint: string, method: string = 'GET', body?: a
   // 6. Notas Clínicas CRUD Aisladas
   // -------------------------------------------------------------
   if (clean.includes('clinical-notes')) {
-    const notes = getLocalCollection<ClinicalNote>(notesKey, []);
+    const isSuperAdmin = isAdminActive();
+    const notes = isSuperAdmin ? getAllTenantsNotes() : getLocalCollection<ClinicalNote>(notesKey, []);
     const noteIdMatch = clean.match(/clinical-notes\/([a-zA-Z0-9_-]+)$/);
 
     if (method === 'POST' && body) {
+      const targetUserId = body.therapistId || currentUserId;
+      const targetNotesKey = getScopedKey('psychocare_db_notes', targetUserId);
       const newNote: ClinicalNote = {
         ...body,
         id: `note-${Date.now()}`,
-        therapistId: currentUserId,
+        therapistId: targetUserId,
         sessionNumber: notes.length + 1,
         sessionDate: body.sessionDate || new Date().toISOString(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      const currentList = getLocalCollection<ClinicalNote>(notesKey, []);
+      const currentList = getLocalCollection<ClinicalNote>(targetNotesKey, []);
       currentList.unshift(newNote);
-      saveLocalCollection(notesKey, currentList);
+      saveLocalCollection(targetNotesKey, currentList);
       return { success: true, data: newNote } as T;
     }
 
     if (noteIdMatch && method === 'PUT' && body) {
-      const currentList = getLocalCollection<ClinicalNote>(notesKey, []);
-      const idx = currentList.findIndex((n) => n.id === noteIdMatch[1]);
-      if (idx !== -1) {
-        currentList[idx] = { ...currentList[idx], ...body, updatedAt: new Date().toISOString() };
-        saveLocalCollection(notesKey, currentList);
-        return { success: true, data: currentList[idx] } as T;
+      const targetId = noteIdMatch[1];
+      let updatedNote: ClinicalNote | null = null;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('psychocare_db_notes_')) {
+          const list = getLocalCollection<ClinicalNote>(k, []);
+          const idx = list.findIndex((n) => n.id === targetId);
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...body, updatedAt: new Date().toISOString() };
+            saveLocalCollection(k, list);
+            updatedNote = list[idx];
+          }
+        }
+      }
+      if (updatedNote) {
+        return { success: true, data: updatedNote } as T;
       }
     }
 
     if (noteIdMatch && method === 'DELETE') {
-      const currentList = getLocalCollection<ClinicalNote>(notesKey, []);
-      const filtered = currentList.filter((n) => n.id !== noteIdMatch[1]);
-      saveLocalCollection(notesKey, filtered);
+      const targetId = noteIdMatch[1];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('psychocare_db_notes_')) {
+          const list = getLocalCollection<ClinicalNote>(k, []);
+          const filtered = list.filter((n) => n.id !== targetId);
+          if (filtered.length !== list.length) {
+            saveLocalCollection(k, filtered);
+          }
+        }
+      }
       return { success: true, message: 'Nota eliminada correctamente' } as T;
     }
 
@@ -951,9 +1197,14 @@ export const api = {
       });
       clearTimeout(timeoutId);
 
+      const contentType = res.headers.get('content-type') || '';
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
+        const errorData = contentType.includes('application/json') ? await res.json().catch(() => ({})) : {};
         throw new Error(errorData.message || `Error HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      if (!contentType.includes('application/json')) {
+        return handleMockRequest<T>(endpoint, 'GET');
       }
 
       return res.json();
@@ -985,9 +1236,14 @@ export const api = {
       });
       clearTimeout(timeoutId);
 
+      const contentType = res.headers.get('content-type') || '';
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
+        const errorData = contentType.includes('application/json') ? await res.json().catch(() => ({})) : {};
         throw new Error(errorData.message || `Error HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      if (!contentType.includes('application/json')) {
+        return handleMockRequest<T>(endpoint, 'POST', body);
       }
 
       const result = await res.json();
@@ -1024,9 +1280,14 @@ export const api = {
       });
       clearTimeout(timeoutId);
 
+      const contentType = res.headers.get('content-type') || '';
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
+        const errorData = contentType.includes('application/json') ? await res.json().catch(() => ({})) : {};
         throw new Error(errorData.message || `Error HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      if (!contentType.includes('application/json')) {
+        return handleMockRequest<T>(endpoint, 'PUT', body);
       }
 
       const result = await res.json();
@@ -1062,9 +1323,14 @@ export const api = {
       });
       clearTimeout(timeoutId);
 
+      const contentType = res.headers.get('content-type') || '';
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
+        const errorData = contentType.includes('application/json') ? await res.json().catch(() => ({})) : {};
         throw new Error(errorData.message || `Error HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      if (!contentType.includes('application/json')) {
+        return handleMockRequest<T>(endpoint, 'DELETE');
       }
 
       const result = await res.json();

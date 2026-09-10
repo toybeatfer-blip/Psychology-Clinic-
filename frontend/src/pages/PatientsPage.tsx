@@ -1,21 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { Patient } from '../types/index';
 import { api } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import { Header } from '../components/layout/Header';
 import { PatientCard } from '../components/patients/PatientCard';
 import { PatientFormModal } from '../components/patients/PatientFormModal';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { UserPlus, Search, Users, Filter } from 'lucide-react';
+import { UserPlus, Search, Users, Filter, Building2 } from 'lucide-react';
 
 export const PatientsPage: React.FC = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'ADMIN';
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [search, setSearch] = useState('');
   const [filterActive, setFilterActive] = useState<string>('all'); // all, active, inactive
+  const [selectedTherapist, setSelectedTherapist] = useState<string>('ALL');
   const [loading, setLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [patientToEdit, setPatientToEdit] = useState<Patient | null>(null);
+  const [therapists, setTherapists] = useState<Array<{ id: string; name: string; email: string }>>([]);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      try {
+        const rawUsers = localStorage.getItem('psychocare_db_users');
+        if (rawUsers) {
+          const parsed = JSON.parse(rawUsers);
+          if (Array.isArray(parsed)) {
+            setTherapists(
+              parsed.filter(Boolean).map((u: any) => ({
+                id: u.id,
+                name: u.fullName || u.email,
+                email: u.email,
+              }))
+            );
+          }
+        }
+      } catch {}
+    }
+  }, [isSuperAdmin]);
 
   const fetchPatients = React.useCallback(async (silent: boolean = false) => {
     if (!silent) setLoading(true);
@@ -29,6 +55,9 @@ export const PatientsPage: React.FC = () => {
       } else if (filterActive === 'inactive') {
         query += `&isActive=false`;
       }
+      if (selectedTherapist !== 'ALL') {
+        query += `&therapistId=${encodeURIComponent(selectedTherapist)}`;
+      }
 
       const res = await api.get<{ success: boolean; data: Patient[] }>(query);
       setPatients(res.data || []);
@@ -37,7 +66,7 @@ export const PatientsPage: React.FC = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [search, filterActive]);
+  }, [search, filterActive, selectedTherapist]);
 
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
@@ -46,22 +75,45 @@ export const PatientsPage: React.FC = () => {
 
     const interval = setInterval(() => {
       fetchPatients(true);
-    }, 6000);
+    }, 5000);
 
     const handleFocus = () => {
       fetchPatients(true);
     };
 
+    const handleCloudSynced = () => {
+      fetchPatients(true);
+      if (isSuperAdmin) {
+        try {
+          const rawUsers = localStorage.getItem('psychocare_db_users');
+          if (rawUsers) {
+            const parsed = JSON.parse(rawUsers);
+            if (Array.isArray(parsed)) {
+              setTherapists(
+                parsed.filter(Boolean).map((u: any) => ({
+                  id: u.id,
+                  name: u.fullName || u.email,
+                  email: u.email,
+                }))
+              );
+            }
+          }
+        } catch {}
+      }
+    };
+
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('psychocare_cloud_synced', handleCloudSynced);
 
     return () => {
       clearTimeout(delayDebounce);
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('psychocare_cloud_synced', handleCloudSynced);
     };
-  }, [fetchPatients]);
+  }, [fetchPatients, isSuperAdmin]);
 
   const handleEditPatient = (patient: Patient) => {
     setPatientToEdit(patient);
@@ -89,7 +141,7 @@ export const PatientsPage: React.FC = () => {
     <div className="flex-1 flex flex-col min-w-0">
       <Header
         title="Gestión de Pacientes"
-        subtitle="Expedientes clínicos individuales y directorio de consultorio"
+        subtitle={isSuperAdmin ? "Vista unificada de todos los consultorios y expedientes clínicos del sistema" : "Expedientes clínicos individuales y directorio de consultorio"}
         actions={
           <Button
             size="sm"
@@ -103,17 +155,36 @@ export const PatientsPage: React.FC = () => {
 
       <div className="p-8 space-y-6 max-w-7xl mx-auto w-full">
         {/* Barra de Filtros y Búsqueda */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="w-full sm:w-96">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row items-center justify-between gap-4">
+          <div className="w-full lg:w-96">
             <Input
-              placeholder="Buscar por nombre, teléfono, email u ocupación..."
+              placeholder="Buscar por nombre, teléfono, email o consultorio..."
               leftIcon={<Search className="w-4 h-4" />}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            {isSuperAdmin && therapists.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <Building2 className="w-3.5 h-3.5 text-teal-600" />
+                <span className="text-xs text-slate-500 font-medium">Consultorio:</span>
+                <select
+                  value={selectedTherapist}
+                  onChange={(e) => setSelectedTherapist(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-teal-800 border-none outline-none cursor-pointer"
+                >
+                  <option value="ALL">Todos los Consultorios ({therapists.length})</option>
+                  {therapists.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mr-1">
               <Filter className="w-3.5 h-3.5" />
               <span>Estado:</span>
