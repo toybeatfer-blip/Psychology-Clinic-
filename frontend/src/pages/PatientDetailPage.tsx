@@ -647,7 +647,7 @@ export const PatientDetailPage: React.FC = () => {
           onClose={() => setIsNoteModalOpen(false)}
           patientId={patient.id}
           noteToEdit={noteToEdit}
-          onSuccess={fetchPatientDetail}
+          onSuccess={() => fetchPatientDetail()}
         />
       )}
 
@@ -656,7 +656,7 @@ export const PatientDetailPage: React.FC = () => {
           isOpen={isPatientModalOpen}
           onClose={() => setIsPatientModalOpen(false)}
           patientToEdit={patient}
-          onSuccess={fetchPatientDetail}
+          onSuccess={() => fetchPatientDetail()}
         />
       )}
 
@@ -665,7 +665,7 @@ export const PatientDetailPage: React.FC = () => {
           isOpen={isAppointmentModalOpen}
           onClose={() => setIsAppointmentModalOpen(false)}
           patients={[patient]}
-          onSuccess={fetchPatientDetail}
+          onSuccess={() => fetchPatientDetail()}
         />
       )}
 
@@ -674,7 +674,7 @@ export const PatientDetailPage: React.FC = () => {
           isOpen={isAttachmentModalOpen}
           onClose={() => setIsAttachmentModalOpen(false)}
           patientId={patient.id}
-          onSuccess={fetchPatientDetail}
+          onSuccess={() => fetchPatientDetail()}
         />
       )}
 

@@ -53,6 +53,10 @@ export const DashboardPage: React.FC = () => {
       fetchDashboardData(true);
     }, 6000);
 
+    const handleFocus = () => {
+      fetchDashboardData(true);
+    };
+
     const handleCloudSynced = () => {
       fetchDashboardData(true);
     };
