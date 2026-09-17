@@ -152,7 +152,7 @@
       "tests": {},
       "consents": {},
       "evaluations": {},
-      "updatedAt": "2026-09-17T21:33:30.450Z",
+      "updatedAt": "2026-09-17T21:39:50.753Z",
       "lastActivityAt": "2026-09-04T02:01:50.459Z"
     },
     "f64865f4-ed1d-42ff-a0ab-45898aabe93b": {
@@ -168,7 +168,7 @@
     }
   },
   "deletedUserIds": [],
-  "lastSync": "2026-09-17T21:33:30.450Z",
+  "lastSync": "2026-09-17T21:39:50.753Z",
   "adminContact": {
     "adminName": "Fernando",
     "phoneWhatsApp": "+52 474 1539891",
