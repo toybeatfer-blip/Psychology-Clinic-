@@ -1,0 +1,122 @@
+{
+  "adminContact": {
+    "adminName": "Fernando",
+    "phoneWhatsApp": "+52 474 1539891",
+    "email": "toybeatfer@gmail.com",
+    "helpMessage": "Para soporte técnico, alta de consultorios o dudas del sistema, comunícate directamente con el Creador.",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "deletedPatientIds": [],
+  "users": [
+    {
+      "id": "c9a88189-5cfd-4ef3-8330-4b51c808e7bd",
+      "email": "Fernando01",
+      "fullName": "Fernando (Super Administrador)",
+      "role": "ADMIN",
+      "createdAt": "2026-09-04T02:01:50.459Z",
+      "updatedAt": "2026-09-10T06:00:06.491Z",
+      "profile": {
+        "id": "9ddd03ec-9662-46e9-a06a-3062e88859d7",
+        "userId": "c9a88189-5cfd-4ef3-8330-4b51c808e7bd",
+        "professionalId": "ADMIN-MASTER-01",
+        "specialty": "Administración Global del Sistema",
+        "phone": "",
+        "clinicAddress": "",
+        "bio": "",
+        "hourlyRate": 60,
+        "currency": "USD",
+        "avatarUrl": "",
+        "createdAt": "2026-09-04T02:01:50.459Z",
+        "updatedAt": "2026-09-10T06:00:06.491Z"
+      },
+      "clinicSettings": {
+        "id": "0526bcb7-5391-42f7-a371-bb9fda7a8fbd",
+        "userId": "c9a88189-5cfd-4ef3-8330-4b51c808e7bd",
+        "clinicName": "PsychoCare Master",
+        "tagline": "Centro de Psicoterapia y Salud Emocional",
+        "logoUrl": null,
+        "primaryColor": "#0d9488",
+        "secondaryColor": "#0f766e",
+        "themeMode": "light",
+        "sidebarStyle": "dark",
+        "phone": null,
+        "email": null,
+        "website": null,
+        "address": null,
+        "taxId": null,
+        "receiptFooter": null,
+        "appointmentNotice": null,
+        "createdAt": "2026-09-04T02:01:50.459Z",
+        "updatedAt": "2026-09-04T02:01:50.459Z"
+      }
+    },
+    {
+      "id": "f64865f4-ed1d-42ff-a0ab-45898aabe93b",
+      "email": "dr.carlos@psychocare.com",
+      "fullName": "Dr. Carlos Mendoza",
+      "role": "THERAPIST",
+      "createdAt": "2026-08-23T01:22:51.532Z",
+      "updatedAt": "2026-09-10T06:00:06.491Z",
+      "profile": {
+        "id": "c192fc54-3c53-48b4-9410-020e78c2bf00",
+        "userId": "f64865f4-ed1d-42ff-a0ab-45898aabe93b",
+        "professionalId": "PSI-849201",
+        "specialty": "Psicología Clínica y Terapia Cognitivo-Conductual (TCC)",
+        "phone": "+52 55 1234 5678",
+        "clinicAddress": "Av. Insurgentes Sur 1450, Consultorio 402, CDMX",
+        "bio": "Especialista en trastornos del estado de ánimo, ansiedad, manejo del estrés y terapia individual de adultos con más de 10 años de experiencia clínica.",
+        "hourlyRate": 60,
+        "currency": "MXN",
+        "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=200&auto=format&fit=crop&q=80",
+        "createdAt": "2026-09-10T06:00:02.948Z",
+        "updatedAt": "2026-09-10T06:00:06.491Z"
+      }
+    }
+  ],
+  "tenants": {
+    "c9a88189-5cfd-4ef3-8330-4b51c808e7bd": {
+      "patients": [],
+      "appointments": [],
+      "notes": [],
+      "attachments": [],
+      "clinicSettings": {
+        "id": "0526bcb7-5391-42f7-a371-bb9fda7a8fbd",
+        "userId": "c9a88189-5cfd-4ef3-8330-4b51c808e7bd",
+        "clinicName": "PsychoCare Master",
+        "tagline": "Centro de Psicoterapia y Salud Emocional",
+        "logoUrl": null,
+        "primaryColor": "#0d9488",
+        "secondaryColor": "#0f766e",
+        "themeMode": "light",
+        "sidebarStyle": "dark",
+        "phone": null,
+        "email": null,
+        "website": null,
+        "address": null,
+        "taxId": null,
+        "receiptFooter": null,
+        "appointmentNotice": null,
+        "createdAt": "2026-09-04T02:01:50.459Z",
+        "updatedAt": "2026-09-04T02:01:50.459Z"
+      },
+      "tests": {},
+      "consents": {},
+      "evaluations": {},
+      "updatedAt": "2026-09-10T06:00:06.491Z",
+      "lastActivityAt": "2026-09-04T02:01:50.459Z"
+    },
+    "f64865f4-ed1d-42ff-a0ab-45898aabe93b": {
+      "patients": [],
+      "appointments": [],
+      "notes": [],
+      "attachments": [],
+      "tests": {},
+      "consents": {},
+      "evaluations": {},
+      "updatedAt": "2026-09-10T06:00:06.491Z",
+      "lastActivityAt": "2026-08-23T01:22:51.532Z"
+    }
+  },
+  "deletedUserIds": [],
+  "lastSync": "2026-09-10T06:00:06.491Z"
+}

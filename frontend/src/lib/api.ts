@@ -14,7 +14,7 @@ import {
   ClinicalEvaluation,
   InformedConsent,
 } from '../types/index';
-import { syncLocalWithCloud, deleteUserFromCloud, toggleUserSuspensionInCloud, registerOrUpdateUserInCloud, getDeterministicUserId } from './cloudSync';
+import { syncLocalWithCloud, deleteUserFromCloud, deletePatientFromCloud, toggleUserSuspensionInCloud, registerOrUpdateUserInCloud, getDeterministicUserId } from './cloudSync';
 
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
@@ -1207,7 +1207,27 @@ export const api = {
         return handleMockRequest<T>(endpoint, 'GET');
       }
 
-      return res.json();
+      const result = await res.json();
+      try {
+        if (cleanEndpoint.startsWith('/patients') && result) {
+          const list = Array.isArray(result) ? result : (result.data && Array.isArray(result.data) ? result.data : null);
+          if (list && list.length > 0) {
+            const activeUser = getActiveUser();
+            const isSuperAdmin = activeUser?.role === 'ADMIN';
+            if (!isSuperAdmin) {
+              const tId = getActiveUserId();
+              const targetKey = getScopedKey('psychocare_db_patients', tId);
+              const currentList = getLocalCollection<Patient>(targetKey, []);
+              const pMap = new Map<string, Patient>();
+              currentList.forEach((p) => p && p.id && pMap.set(p.id, p));
+              list.forEach((p: Patient) => p && p.id && pMap.set(p.id, { ...(pMap.get(p.id) || {}), ...p }));
+              saveLocalCollection(targetKey, Array.from(pMap.values()));
+            }
+          }
+        }
+      } catch {}
+
+      return result;
     } catch (networkError: any) {
       console.warn(`[Modo Local / Cache Activado] Fallback por: ${networkError.message}`);
       return handleMockRequest<T>(endpoint, 'GET');
@@ -1248,7 +1268,21 @@ export const api = {
 
       const result = await res.json();
       try {
-        handleMockRequest<T>(endpoint, 'POST', body);
+        const patientData = result?.data || result;
+        if (cleanEndpoint.startsWith('/patients') && !cleanEndpoint.includes('/consent') && !cleanEndpoint.includes('/psychometric-tests') && !cleanEndpoint.includes('/clinical-evaluation') && patientData && patientData.id) {
+          const tId = patientData.therapistId || getActiveUserId();
+          const targetKey = getScopedKey('psychocare_db_patients', tId);
+          const currentList = getLocalCollection<Patient>(targetKey, []);
+          const existingIdx = currentList.findIndex((p) => p.id === patientData.id);
+          if (existingIdx !== -1) {
+            currentList[existingIdx] = { ...currentList[existingIdx], ...patientData, updatedAt: new Date().toISOString() };
+          } else {
+            currentList.unshift({ ...patientData, updatedAt: new Date().toISOString() });
+          }
+          saveLocalCollection(targetKey, currentList);
+        } else {
+          handleMockRequest<T>(endpoint, 'POST', body);
+        }
       } catch {}
 
       return result;
@@ -1292,7 +1326,33 @@ export const api = {
 
       const result = await res.json();
       try {
-        handleMockRequest<T>(endpoint, 'PUT', body);
+        const patientData = result?.data || result;
+        if (cleanEndpoint.startsWith('/patients') && patientData && patientData.id) {
+          const tId = patientData.therapistId || getActiveUserId();
+          const targetKey = getScopedKey('psychocare_db_patients', tId);
+          const currentList = getLocalCollection<Patient>(targetKey, []);
+          const existingIdx = currentList.findIndex((p) => p.id === patientData.id);
+          if (existingIdx !== -1) {
+            currentList[existingIdx] = { ...currentList[existingIdx], ...patientData, updatedAt: new Date().toISOString() };
+          } else {
+            currentList.unshift({ ...patientData, updatedAt: new Date().toISOString() });
+          }
+          saveLocalCollection(targetKey, currentList);
+
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('psychocare_db_patients_') && k !== targetKey) {
+              const list = getLocalCollection<Patient>(k, []);
+              const idx = list.findIndex((p) => p.id === patientData.id);
+              if (idx !== -1) {
+                list[idx] = { ...list[idx], ...patientData, updatedAt: new Date().toISOString() };
+                saveLocalCollection(k, list);
+              }
+            }
+          }
+        } else {
+          handleMockRequest<T>(endpoint, 'PUT', body);
+        }
       } catch {}
 
       return result;
@@ -1335,7 +1395,24 @@ export const api = {
 
       const result = await res.json();
       try {
-        handleMockRequest<T>(endpoint, 'DELETE');
+        const match = cleanEndpoint.match(/^\/?patients\/([a-zA-Z0-9_-]+)$/);
+        if (match) {
+          const pId = match[1];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('psychocare_db_patients_')) {
+              const list = getLocalCollection<Patient>(k, []);
+              const filtered = list.filter((p) => p.id !== pId);
+              if (filtered.length !== list.length) {
+                saveLocalCollection(k, filtered);
+              }
+            }
+          }
+          const uId = getActiveUserId();
+          deletePatientFromCloud(pId, uId);
+        } else {
+          handleMockRequest<T>(endpoint, 'DELETE');
+        }
       } catch {}
 
       return result;

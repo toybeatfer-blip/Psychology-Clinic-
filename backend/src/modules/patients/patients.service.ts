@@ -9,14 +9,20 @@ export async function getPatients(
     isActive?: boolean;
     page?: number;
     limit?: number;
+    isAdmin?: boolean;
+    therapistFilter?: string;
   } = {}
 ) {
-  const { search, isActive, page = 1, limit = 50 } = options;
+  const { search, isActive, page = 1, limit = 50, isAdmin, therapistFilter } = options;
   const skip = (page - 1) * limit;
 
-  const where: any = {
-    therapistId,
-  };
+  const where: any = {};
+
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  } else if (therapistFilter && therapistFilter !== 'ALL') {
+    where.therapistId = therapistFilter;
+  }
 
   if (typeof isActive === 'boolean') {
     where.isActive = isActive;
@@ -40,6 +46,13 @@ export async function getPatients(
       take: limit,
       orderBy: { updatedAt: 'desc' },
       include: {
+        therapist: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
         _count: {
           select: {
             appointments: true,
@@ -52,7 +65,11 @@ export async function getPatients(
   ]);
 
   return {
-    data: patients,
+    data: patients.map((p: any) => ({
+      ...p,
+      therapistName: p.therapist?.fullName || undefined,
+      therapistEmail: p.therapist?.email || undefined,
+    })),
     pagination: {
       total,
       page,
@@ -62,13 +79,18 @@ export async function getPatients(
   };
 }
 
-export async function getPatientById(therapistId: string, patientId: string) {
+export async function getPatientById(therapistId: string, patientId: string, isAdmin: boolean = false) {
+  const where: any = { id: patientId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const patient = await prisma.patient.findFirst({
-    where: {
-      id: patientId,
-      therapistId,
-    },
+    where,
     include: {
+      therapist: {
+        select: { id: true, fullName: true, email: true },
+      },
       appointments: {
         orderBy: { startDateTime: 'desc' },
         take: 10,
@@ -86,7 +108,11 @@ export async function getPatientById(therapistId: string, patientId: string) {
     throw new Error('Paciente no encontrado o no tiene permisos para acceder a este registro.');
   }
 
-  return patient;
+  return {
+    ...patient,
+    therapistName: (patient as any).therapist?.fullName || undefined,
+    therapistEmail: (patient as any).therapist?.email || undefined,
+  };
 }
 
 export async function createPatient(therapistId: string, data: CreatePatientInput) {
@@ -104,11 +130,13 @@ export async function createPatient(therapistId: string, data: CreatePatientInpu
   return patient;
 }
 
-export async function updatePatient(therapistId: string, patientId: string, data: UpdatePatientInput) {
-  // Verificar propiedad
-  const existing = await prisma.patient.findFirst({
-    where: { id: patientId, therapistId },
-  });
+export async function updatePatient(therapistId: string, patientId: string, data: UpdatePatientInput, isAdmin: boolean = false) {
+  const where: any = { id: patientId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
+  const existing = await prisma.patient.findFirst({ where });
 
   if (!existing) {
     throw new Error('Paciente no encontrado o no tiene permisos para modificar este registro.');
@@ -132,10 +160,13 @@ export async function updatePatient(therapistId: string, patientId: string, data
   return updated;
 }
 
-export async function deletePatient(therapistId: string, patientId: string) {
-  const existing = await prisma.patient.findFirst({
-    where: { id: patientId, therapistId },
-  });
+export async function deletePatient(therapistId: string, patientId: string, isAdmin: boolean = false) {
+  const where: any = { id: patientId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
+  const existing = await prisma.patient.findFirst({ where });
 
   if (!existing) {
     throw new Error('Paciente no encontrado o no tiene permisos para eliminar este registro.');

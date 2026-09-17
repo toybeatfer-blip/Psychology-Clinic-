@@ -252,40 +252,108 @@ export const AdminUsersPage: React.FC = () => {
           const cleanEmail = emailKey.replace(/[^a-z0-9]/g, '_');
           const canonicalId = u.id;
 
+          const emailUser = (u.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '_');
           let tenant =
             cloudState.tenants[canonicalId] ||
             cloudState.tenants[getDeterministicUserId(u.email)] ||
-            cloudState.tenants[emailKey];
+            cloudState.tenants[emailKey] ||
+            cloudState.tenants[`therapist_${emailUser}`];
 
           if (!tenant) {
             const foundKey = Object.keys(cloudState.tenants).find(
-              (k) => (cleanEmail && k.includes(cleanEmail)) || (canonicalId && canonicalId.startsWith('therapist-') && k.includes(canonicalId))
+              (k) =>
+                (cleanEmail && (k.includes(cleanEmail) || cleanEmail.includes(k.replace(/^therapist[-_]/, '')))) ||
+                (emailUser && k.includes(emailUser)) ||
+                (canonicalId && (k.includes(canonicalId) || canonicalId.includes(k)))
             );
             if (foundKey) {
               tenant = cloudState.tenants[foundKey];
             }
           }
 
-          if (tenant) {
-            const finalPatients = (tenant.patients && tenant.patients.length > 0) ? tenant.patients : (u.patients || []);
-            const finalAppts = (tenant.appointments && tenant.appointments.length > 0) ? tenant.appointments : (u.appointments || []);
-            const finalNotes = (tenant.notes && tenant.notes.length > 0) ? tenant.notes : (u.notes || []);
-            return {
-              ...u,
-              patientsCount: finalPatients.length,
-              appointmentsCount: finalAppts.length,
-              notesCount: finalNotes.length,
-              patients: finalPatients,
-              appointments: finalAppts,
-              notes: finalNotes,
-              lastActivityAt: tenant.lastActivityAt || u.lastActivityAt,
-            };
-          }
-          return u;
+          // Fusión bidireccional inteligente: preserva pacientes nuevos y ediciones más recientes
+          const patientMap = new Map<string, Patient>();
+          (tenant?.patients || []).forEach((p) => p && p.id && patientMap.set(p.id, p));
+          (u.patients || []).forEach((p) => {
+            if (!p || !p.id) return;
+            const existing = patientMap.get(p.id);
+            if (!existing) {
+              patientMap.set(p.id, p);
+            } else {
+              const uTime = new Date(p.updatedAt || p.createdAt || 0).getTime();
+              const exTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+              patientMap.set(p.id, uTime >= exTime ? { ...existing, ...p } : { ...p, ...existing });
+            }
+          });
+          const finalPatients = Array.from(patientMap.values());
+
+          const apptMap = new Map<string, Appointment>();
+          (tenant?.appointments || []).forEach((a) => a && a.id && apptMap.set(a.id, a));
+          (u.appointments || []).forEach((a) => {
+            if (!a || !a.id) return;
+            const existing = apptMap.get(a.id);
+            if (!existing) {
+              apptMap.set(a.id, a);
+            } else {
+              const uTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+              const exTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+              apptMap.set(a.id, uTime >= exTime ? { ...existing, ...a } : { ...a, ...existing });
+            }
+          });
+          const finalAppts = Array.from(apptMap.values());
+
+          const noteMap = new Map<string, ClinicalNote>();
+          (tenant?.notes || []).forEach((n) => n && n.id && noteMap.set(n.id, n));
+          (u.notes || []).forEach((n) => {
+            if (!n || !n.id) return;
+            const existing = noteMap.get(n.id);
+            if (!existing) {
+              noteMap.set(n.id, n);
+            } else {
+              const uTime = new Date(n.updatedAt || n.createdAt || 0).getTime();
+              const exTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+              noteMap.set(n.id, uTime >= exTime ? { ...existing, ...n } : { ...n, ...existing });
+            }
+          });
+          const finalNotes = Array.from(noteMap.values());
+
+          // Recalcular fecha de última actividad
+          let latestAct = tenant?.lastActivityAt || u.lastActivityAt || u.createdAt || new Date().toISOString();
+          finalPatients.forEach((p) => {
+            if (p.updatedAt && new Date(p.updatedAt).getTime() > new Date(latestAct).getTime()) {
+              latestAct = p.updatedAt;
+            }
+          });
+          finalAppts.forEach((a) => {
+            if (a.updatedAt && new Date(a.updatedAt).getTime() > new Date(latestAct).getTime()) {
+              latestAct = a.updatedAt;
+            }
+          });
+          finalNotes.forEach((n) => {
+            if (n.updatedAt && new Date(n.updatedAt).getTime() > new Date(latestAct).getTime()) {
+              latestAct = n.updatedAt;
+            }
+          });
+
+          return {
+            ...u,
+            patientsCount: finalPatients.length,
+            appointmentsCount: finalAppts.length,
+            notesCount: finalNotes.length,
+            patients: finalPatients,
+            appointments: finalAppts,
+            notes: finalNotes,
+            lastActivityAt: latestAct,
+          };
         });
       }
 
       setUsers(summaries);
+      setInspectingUser((prev) => {
+        if (!prev) return null;
+        const found = summaries.find((s) => s.id === prev.id || (s.email && prev.email && s.email.toLowerCase() === prev.email.toLowerCase()));
+        return found || prev;
+      });
       const now = new Date();
       setLastSyncTime(
         `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(

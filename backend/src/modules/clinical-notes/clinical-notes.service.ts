@@ -1,21 +1,27 @@
 import { prisma } from '../../config/db.js';
 import { CreateClinicalNoteInput, UpdateClinicalNoteInput } from './clinical-notes.schemas.js';
 
-export async function getClinicalNotesByPatient(therapistId: string, patientId: string) {
+export async function getClinicalNotesByPatient(therapistId: string, patientId: string, isAdmin?: boolean) {
   // Verificar acceso al paciente
+  const patientWhere: any = { id: patientId };
+  if (!isAdmin) {
+    patientWhere.therapistId = therapistId;
+  }
   const patient = await prisma.patient.findFirst({
-    where: { id: patientId, therapistId },
+    where: patientWhere,
   });
 
   if (!patient) {
     throw new Error('Paciente no encontrado o sin permisos.');
   }
 
+  const notesWhere: any = { patientId };
+  if (!isAdmin) {
+    notesWhere.therapistId = therapistId;
+  }
+
   const notes = await prisma.clinicalNote.findMany({
-    where: {
-      patientId,
-      therapistId,
-    },
+    where: notesWhere,
     orderBy: { sessionDate: 'desc' },
     include: {
       appointment: {
@@ -33,12 +39,14 @@ export async function getClinicalNotesByPatient(therapistId: string, patientId: 
   return notes;
 }
 
-export async function getClinicalNoteById(therapistId: string, noteId: string) {
+export async function getClinicalNoteById(therapistId: string, noteId: string, isAdmin?: boolean) {
+  const where: any = { id: noteId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const note = await prisma.clinicalNote.findFirst({
-    where: {
-      id: noteId,
-      therapistId,
-    },
+    where,
     include: {
       patient: {
         select: {
@@ -60,21 +68,28 @@ export async function getClinicalNoteById(therapistId: string, noteId: string) {
 
 export async function createClinicalNote(
   therapistId: string,
-  data: CreateClinicalNoteInput & { patientId: string }
+  data: CreateClinicalNoteInput & { patientId: string },
+  isAdmin?: boolean
 ) {
+  const patientWhere: any = { id: data.patientId };
+  if (!isAdmin) {
+    patientWhere.therapistId = therapistId;
+  }
   const patient = await prisma.patient.findFirst({
-    where: { id: data.patientId, therapistId },
+    where: patientWhere,
   });
 
   if (!patient) {
     throw new Error('Paciente no encontrado o sin permisos.');
   }
 
+  const effectiveTherapistId = isAdmin ? (patient.therapistId || therapistId) : therapistId;
+
   // Calcular sessionNumber si no se proporcionó
   let sessionNumber = data.sessionNumber;
   if (!sessionNumber) {
     const count = await prisma.clinicalNote.count({
-      where: { patientId: data.patientId, therapistId },
+      where: { patientId: data.patientId, therapistId: effectiveTherapistId },
     });
     sessionNumber = count + 1;
   }
@@ -83,8 +98,12 @@ export async function createClinicalNote(
 
   // Si hay appointmentId, verificar que exista y pertenezca al paciente/terapeuta
   if (data.appointmentId) {
+    const apptWhere: any = { id: data.appointmentId, patientId: data.patientId };
+    if (!isAdmin) {
+      apptWhere.therapistId = therapistId;
+    }
     const appointment = await prisma.appointment.findFirst({
-      where: { id: data.appointmentId, therapistId, patientId: data.patientId },
+      where: apptWhere,
     });
     if (!appointment) {
       throw new Error('La cita vinculada no es válida para este paciente.');
@@ -93,7 +112,7 @@ export async function createClinicalNote(
 
   const note = await prisma.clinicalNote.create({
     data: {
-      therapistId,
+      therapistId: effectiveTherapistId,
       patientId: data.patientId,
       appointmentId: data.appointmentId || null,
       sessionNumber,
@@ -131,10 +150,16 @@ export async function createClinicalNote(
 export async function updateClinicalNote(
   therapistId: string,
   noteId: string,
-  data: UpdateClinicalNoteInput
+  data: UpdateClinicalNoteInput,
+  isAdmin?: boolean
 ) {
+  const where: any = { id: noteId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const existing = await prisma.clinicalNote.findFirst({
-    where: { id: noteId, therapistId },
+    where,
   });
 
   if (!existing) {
@@ -166,9 +191,14 @@ export async function updateClinicalNote(
   return updated;
 }
 
-export async function deleteClinicalNote(therapistId: string, noteId: string) {
+export async function deleteClinicalNote(therapistId: string, noteId: string, isAdmin?: boolean) {
+  const where: any = { id: noteId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const existing = await prisma.clinicalNote.findFirst({
-    where: { id: noteId, therapistId },
+    where,
   });
 
   if (!existing) {

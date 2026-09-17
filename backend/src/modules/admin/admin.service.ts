@@ -7,10 +7,79 @@ export async function getAllRegisteredUsers() {
   const users = (masterState.users || []).filter((u) => u && !deletedSet.has(u.id));
 
   return users.map((u) => {
-    const tenant = masterState.tenants[u.id] || { patients: [], appointments: [], notes: [] };
-    const pList = tenant.patients || [];
-    const aList = tenant.appointments || [];
-    const nList = tenant.notes || [];
+    const emailKey = (u.email || '').toLowerCase().trim();
+    const emailPrefix = emailKey.split('@')[0];
+    const sanitizedEmail = emailKey.replace(/[^a-z0-9]/g, '_');
+
+    // Reunir datos de cualquier tenant asociado (por ID canónico o alias)
+    const matchingTenants: any[] = [];
+    if (masterState.tenants) {
+      if (masterState.tenants[u.id]) {
+        matchingTenants.push(masterState.tenants[u.id]);
+      }
+      Object.keys(masterState.tenants).forEach((k) => {
+        if (k !== u.id) {
+          const kLower = k.toLowerCase();
+          if (
+            (sanitizedEmail && kLower.includes(sanitizedEmail)) ||
+            (emailPrefix && emailPrefix.length > 2 && kLower.includes(emailPrefix)) ||
+            kLower === `therapist_${emailPrefix}` ||
+            kLower === `therapist_${sanitizedEmail}` ||
+            k.includes(u.id) ||
+            u.id.includes(k)
+          ) {
+            matchingTenants.push(masterState.tenants[k]);
+          }
+        }
+      });
+    }
+
+    // Fusionar pacientes, citas y notas
+    const patientMap = new Map<string, any>();
+    const apptMap = new Map<string, any>();
+    const noteMap = new Map<string, any>();
+    let resolvedClinicSettings = u.clinicSettings;
+
+    matchingTenants.forEach((t) => {
+      if (t.clinicSettings && !resolvedClinicSettings) resolvedClinicSettings = t.clinicSettings;
+      (t.patients || []).forEach((p: any) => {
+        if (!p || !p.id) return;
+        const ex = patientMap.get(p.id);
+        if (!ex) {
+          patientMap.set(p.id, p);
+        } else {
+          const pTime = new Date(p.updatedAt || p.createdAt || 0).getTime();
+          const exTime = new Date(ex.updatedAt || ex.createdAt || 0).getTime();
+          patientMap.set(p.id, pTime >= exTime ? { ...ex, ...p } : { ...p, ...ex });
+        }
+      });
+      (t.appointments || []).forEach((a: any) => {
+        if (!a || !a.id) return;
+        const ex = apptMap.get(a.id);
+        if (!ex) {
+          apptMap.set(a.id, a);
+        } else {
+          const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+          const exTime = new Date(ex.updatedAt || ex.createdAt || 0).getTime();
+          apptMap.set(a.id, aTime >= exTime ? { ...ex, ...a } : { ...a, ...ex });
+        }
+      });
+      (t.notes || []).forEach((n: any) => {
+        if (!n || !n.id) return;
+        const ex = noteMap.get(n.id);
+        if (!ex) {
+          noteMap.set(n.id, n);
+        } else {
+          const nTime = new Date(n.updatedAt || n.createdAt || 0).getTime();
+          const exTime = new Date(ex.updatedAt || ex.createdAt || 0).getTime();
+          noteMap.set(n.id, nTime >= exTime ? { ...ex, ...n } : { ...n, ...ex });
+        }
+      });
+    });
+
+    const pList = Array.from(patientMap.values());
+    const aList = Array.from(apptMap.values());
+    const nList = Array.from(noteMap.values());
 
     // Calcular fecha de última actividad en vivo
     let lastActivity = u.createdAt || new Date().toISOString();
@@ -44,7 +113,7 @@ export async function getAllRegisteredUsers() {
       updatedAt: u.updatedAt,
       lastActivityAt: lastActivity,
       profile: u.profile,
-      clinicSettings: tenant.clinicSettings || u.clinicSettings,
+      clinicSettings: resolvedClinicSettings,
       patientsCount: pList.length,
       appointmentsCount: aList.length,
       notesCount: nList.length,

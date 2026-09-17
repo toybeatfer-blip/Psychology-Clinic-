@@ -5,8 +5,9 @@ export async function listNotesByPatient(req: Request, res: Response, next: Next
   try {
     const therapistId = req.user!.userId;
     const patientId = req.params.patientId as string;
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
 
-    const notes = await clinicalNotesService.getClinicalNotesByPatient(therapistId, patientId);
+    const notes = await clinicalNotesService.getClinicalNotesByPatient(therapistId, patientId, isAdmin);
     res.status(200).json({
       success: true,
       data: notes,
@@ -20,8 +21,9 @@ export async function getNote(req: Request, res: Response, next: NextFunction): 
   try {
     const therapistId = req.user!.userId;
     const noteId = req.params.id as string;
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
 
-    const note = await clinicalNotesService.getClinicalNoteById(therapistId, noteId);
+    const note = await clinicalNotesService.getClinicalNoteById(therapistId, noteId, isAdmin);
     res.status(200).json({
       success: true,
       data: note,
@@ -35,11 +37,12 @@ export async function createNote(req: Request, res: Response, next: NextFunction
   try {
     const therapistId = req.user!.userId;
     const patientId = req.params.patientId as string;
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
 
     const note = await clinicalNotesService.createClinicalNote(therapistId, {
       ...req.body,
       patientId,
-    });
+    }, isAdmin);
 
     res.status(201).json({
       success: true,
@@ -55,8 +58,9 @@ export async function updateNote(req: Request, res: Response, next: NextFunction
   try {
     const therapistId = req.user!.userId;
     const noteId = req.params.id as string;
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
 
-    const updated = await clinicalNotesService.updateClinicalNote(therapistId, noteId, req.body);
+    const updated = await clinicalNotesService.updateClinicalNote(therapistId, noteId, req.body, isAdmin);
     res.status(200).json({
       success: true,
       message: 'Nota clínica actualizada correctamente',
@@ -71,8 +75,9 @@ export async function deleteNote(req: Request, res: Response, next: NextFunction
   try {
     const therapistId = req.user!.userId;
     const noteId = req.params.id as string;
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
 
-    const result = await clinicalNotesService.deleteClinicalNote(therapistId, noteId);
+    const result = await clinicalNotesService.deleteClinicalNote(therapistId, noteId, isAdmin);
     res.status(200).json({
       success: true,
       data: result,

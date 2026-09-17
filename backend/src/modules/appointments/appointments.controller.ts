@@ -4,14 +4,17 @@ import { AppointmentStatus } from './appointments.service.js';
 
 export async function listAppointments(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
     const therapistId = req.user!.userId;
-    const { startDate, endDate, patientId, status } = req.query;
+    const { startDate, endDate, patientId, status, therapistId: therapistFilter } = req.query;
 
     const appointments = await appointmentsService.getAppointments(therapistId, {
       startDate: startDate as string | undefined,
       endDate: endDate as string | undefined,
       patientId: patientId as string | undefined,
       status: status as AppointmentStatus | undefined,
+      isAdmin,
+      therapistFilter: therapistFilter as string | undefined,
     });
 
     res.status(200).json({
@@ -25,10 +28,11 @@ export async function listAppointments(req: Request, res: Response, next: NextFu
 
 export async function getAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
     const therapistId = req.user!.userId;
     const appointmentId = req.params.id as string;
 
-    const appointment = await appointmentsService.getAppointmentById(therapistId, appointmentId);
+    const appointment = await appointmentsService.getAppointmentById(therapistId, appointmentId, isAdmin);
     res.status(200).json({
       success: true,
       data: appointment,
@@ -40,8 +44,9 @@ export async function getAppointment(req: Request, res: Response, next: NextFunc
 
 export async function createAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
     const therapistId = req.user!.userId;
-    const appointment = await appointmentsService.createAppointment(therapistId, req.body);
+    const appointment = await appointmentsService.createAppointment(therapistId, req.body, isAdmin);
     res.status(201).json({
       success: true,
       message: 'Cita agendada correctamente',
@@ -54,10 +59,11 @@ export async function createAppointment(req: Request, res: Response, next: NextF
 
 export async function updateAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
     const therapistId = req.user!.userId;
     const appointmentId = req.params.id as string;
 
-    const updated = await appointmentsService.updateAppointment(therapistId, appointmentId, req.body);
+    const updated = await appointmentsService.updateAppointment(therapistId, appointmentId, req.body, isAdmin);
     res.status(200).json({
       success: true,
       message: 'Cita actualizada correctamente',
@@ -70,11 +76,12 @@ export async function updateAppointment(req: Request, res: Response, next: NextF
 
 export async function updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
     const therapistId = req.user!.userId;
     const appointmentId = req.params.id as string;
     const { status } = req.body;
 
-    const updated = await appointmentsService.updateAppointmentStatus(therapistId, appointmentId, status);
+    const updated = await appointmentsService.updateAppointmentStatus(therapistId, appointmentId, status, isAdmin);
     res.status(200).json({
       success: true,
       message: 'Estado de cita actualizado',
@@ -87,10 +94,11 @@ export async function updateStatus(req: Request, res: Response, next: NextFuncti
 
 export async function deleteAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
     const therapistId = req.user!.userId;
     const appointmentId = req.params.id as string;
 
-    const result = await appointmentsService.deleteAppointment(therapistId, appointmentId);
+    const result = await appointmentsService.deleteAppointment(therapistId, appointmentId, isAdmin);
     res.status(200).json({
       success: true,
       data: result,

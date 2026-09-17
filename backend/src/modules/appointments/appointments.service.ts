@@ -10,11 +10,17 @@ export async function getAppointments(
     endDate?: string;
     patientId?: string;
     status?: AppointmentStatus;
+    isAdmin?: boolean;
+    therapistFilter?: string;
   } = {}
 ) {
-  const where: any = {
-    therapistId,
-  };
+  const where: any = {};
+
+  if (!filters.isAdmin) {
+    where.therapistId = therapistId;
+  } else if (filters.therapistFilter && filters.therapistFilter !== 'ALL') {
+    where.therapistId = filters.therapistFilter;
+  }
 
   if (filters.patientId) {
     where.patientId = filters.patientId;
@@ -58,12 +64,14 @@ export async function getAppointments(
   return appointments;
 }
 
-export async function getAppointmentById(therapistId: string, appointmentId: string) {
+export async function getAppointmentById(therapistId: string, appointmentId: string, isAdmin?: boolean) {
+  const where: any = { id: appointmentId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const appointment = await prisma.appointment.findFirst({
-    where: {
-      id: appointmentId,
-      therapistId,
-    },
+    where,
     include: {
       patient: true,
       clinicalNote: true,
@@ -77,15 +85,21 @@ export async function getAppointmentById(therapistId: string, appointmentId: str
   return appointment;
 }
 
-export async function createAppointment(therapistId: string, data: CreateAppointmentInput) {
-  // Verificar que el paciente pertenezca a este terapeuta
+export async function createAppointment(therapistId: string, data: CreateAppointmentInput, isAdmin?: boolean) {
+  // Verificar que el paciente exista
+  const patientWhere: any = { id: data.patientId };
+  if (!isAdmin) {
+    patientWhere.therapistId = therapistId;
+  }
   const patient = await prisma.patient.findFirst({
-    where: { id: data.patientId, therapistId },
+    where: patientWhere,
   });
 
   if (!patient) {
     throw new Error('El paciente especificado no existe o no pertenece a tu consultorio.');
   }
+
+  const effectiveTherapistId = isAdmin ? (patient.therapistId || therapistId) : therapistId;
 
   const startDateTime = new Date(data.startDateTime);
   const endDateTime = new Date(data.endDateTime);
@@ -96,7 +110,7 @@ export async function createAppointment(therapistId: string, data: CreateAppoint
 
   const appointment = await prisma.appointment.create({
     data: {
-      therapistId,
+      therapistId: effectiveTherapistId,
       patientId: data.patientId,
       startDateTime,
       endDateTime,
@@ -126,10 +140,16 @@ export async function createAppointment(therapistId: string, data: CreateAppoint
 export async function updateAppointment(
   therapistId: string,
   appointmentId: string,
-  data: UpdateAppointmentInput
+  data: UpdateAppointmentInput,
+  isAdmin?: boolean
 ) {
+  const where: any = { id: appointmentId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const existing = await prisma.appointment.findFirst({
-    where: { id: appointmentId, therapistId },
+    where,
   });
 
   if (!existing) {
@@ -137,8 +157,12 @@ export async function updateAppointment(
   }
 
   if (data.patientId && data.patientId !== existing.patientId) {
+    const patientWhere: any = { id: data.patientId };
+    if (!isAdmin) {
+      patientWhere.therapistId = therapistId;
+    }
     const patient = await prisma.patient.findFirst({
-      where: { id: data.patientId, therapistId },
+      where: patientWhere,
     });
     if (!patient) {
       throw new Error('El nuevo paciente especificado no existe o no pertenece a tu consultorio.');
@@ -185,10 +209,16 @@ export async function updateAppointment(
 export async function updateAppointmentStatus(
   therapistId: string,
   appointmentId: string,
-  status: AppointmentStatus
+  status: AppointmentStatus,
+  isAdmin?: boolean
 ) {
+  const where: any = { id: appointmentId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const existing = await prisma.appointment.findFirst({
-    where: { id: appointmentId, therapistId },
+    where,
   });
 
   if (!existing) {
@@ -206,9 +236,14 @@ export async function updateAppointmentStatus(
   return updated;
 }
 
-export async function deleteAppointment(therapistId: string, appointmentId: string) {
+export async function deleteAppointment(therapistId: string, appointmentId: string, isAdmin?: boolean) {
+  const where: any = { id: appointmentId };
+  if (!isAdmin) {
+    where.therapistId = therapistId;
+  }
+
   const existing = await prisma.appointment.findFirst({
-    where: { id: appointmentId, therapistId },
+    where,
   });
 
   if (!existing) {

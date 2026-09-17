@@ -3,7 +3,10 @@ import * as patientsService from './patients.service.js';
 
 export async function listPatients(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const therapistId = req.user!.userId;
+    const user = req.user!;
+    const isAdmin = user.role === 'ADMIN';
+    const therapistId = user.userId;
+    const therapistFilter = req.query.therapistId as string | undefined;
     const search = req.query.search as string | undefined;
     const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
     const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
@@ -14,6 +17,8 @@ export async function listPatients(req: Request, res: Response, next: NextFuncti
       isActive,
       page,
       limit,
+      isAdmin,
+      therapistFilter: therapistFilter && therapistFilter !== 'ALL' ? therapistFilter : undefined,
     });
 
     res.status(200).json({
@@ -27,10 +32,11 @@ export async function listPatients(req: Request, res: Response, next: NextFuncti
 
 export async function getPatient(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user!.role === 'ADMIN';
     const therapistId = req.user!.userId;
     const patientId = req.params.id as string;
 
-    const patient = await patientsService.getPatientById(therapistId, patientId);
+    const patient = await patientsService.getPatientById(therapistId, patientId, isAdmin);
     res.status(200).json({
       success: true,
       data: patient,
@@ -42,7 +48,8 @@ export async function getPatient(req: Request, res: Response, next: NextFunction
 
 export async function createPatient(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const therapistId = req.user!.userId;
+    const isAdmin = req.user!.role === 'ADMIN';
+    const therapistId = (isAdmin && req.body.therapistId) ? req.body.therapistId : req.user!.userId;
     const patient = await patientsService.createPatient(therapistId, req.body);
     res.status(201).json({
       success: true,
@@ -56,10 +63,11 @@ export async function createPatient(req: Request, res: Response, next: NextFunct
 
 export async function updatePatient(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user!.role === 'ADMIN';
     const therapistId = req.user!.userId;
     const patientId = req.params.id as string;
 
-    const patient = await patientsService.updatePatient(therapistId, patientId, req.body);
+    const patient = await patientsService.updatePatient(therapistId, patientId, req.body, isAdmin);
     res.status(200).json({
       success: true,
       message: 'Paciente actualizado exitosamente',
@@ -72,10 +80,11 @@ export async function updatePatient(req: Request, res: Response, next: NextFunct
 
 export async function deletePatient(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const isAdmin = req.user!.role === 'ADMIN';
     const therapistId = req.user!.userId;
     const patientId = req.params.id as string;
 
-    const result = await patientsService.deletePatient(therapistId, patientId);
+    const result = await patientsService.deletePatient(therapistId, patientId, isAdmin);
     res.status(200).json({
       success: true,
       data: result,

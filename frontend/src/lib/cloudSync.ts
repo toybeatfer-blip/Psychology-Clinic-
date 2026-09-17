@@ -314,6 +314,11 @@ export async function pushToGitHubVault(state: MasterCloudState, maxRetries = 3)
       // Si existe un estado remoto en GitHub, fusionar inteligentemente sin perder cambios
       const mergedToPush: MasterCloudState = remoteState ? mergeStatesDirect(state, remoteState) : state;
 
+      // Si no hay cambios reales respecto a lo que ya existe en GitHub, evitar llamadas PUT redundantes
+      if (remoteState && !hasMeaningfulChanges(mergedToPush, remoteState)) {
+        return true;
+      }
+
       const jsonStr = JSON.stringify(mergedToPush, null, 2);
       const base64 = encodeBase64Utf8(jsonStr);
 
@@ -353,6 +358,42 @@ export async function pushToGitHubVault(state: MasterCloudState, maxRetries = 3)
   return false;
 }
 
+function hasMeaningfulChanges(a: MasterCloudState, b: MasterCloudState | null): boolean {
+  if (!b) return true;
+  if ((a.users || []).length !== (b.users || []).length) return true;
+  for (const u of a.users || []) {
+    const found = (b.users || []).find((x) => (x.email || '').toLowerCase() === (u.email || '').toLowerCase());
+    if (!found) return true;
+    if (found.isSuspended !== u.isSuspended || found.status !== u.status) return true;
+    if (u.updatedAt && found.updatedAt && u.updatedAt !== found.updatedAt) return true;
+  }
+  if ((a.deletedUserIds || []).length !== (b.deletedUserIds || []).length) return true;
+  if ((a.deletedPatientIds || []).length !== (b.deletedPatientIds || []).length) return true;
+
+  const aTenants = a.tenants || {};
+  const bTenants = b.tenants || {};
+  const aKeys = Object.keys(aTenants);
+  const bKeys = Object.keys(bTenants);
+  if (aKeys.length !== bKeys.length) return true;
+
+  for (const k of aKeys) {
+    const tA = aTenants[k];
+    const tB = bTenants[k];
+    if (!tB) return true;
+    if ((tA.patients || []).length !== (tB.patients || []).length) return true;
+    if ((tA.appointments || []).length !== (tB.appointments || []).length) return true;
+    if ((tA.notes || []).length !== (tB.notes || []).length) return true;
+
+    for (const pA of tA.patients || []) {
+      const pB = (tB.patients || []).find((x: any) => x.id === pA.id);
+      if (!pB) return true;
+      if (pA.updatedAt !== pB.updatedAt || pA.fullName !== pB.fullName || pA.phone !== pB.phone || pA.isActive !== pB.isActive) return true;
+    }
+  }
+
+  return false;
+}
+
 function mergeStatesDirect(local: MasterCloudState, remote: MasterCloudState): MasterCloudState {
   const deletedUsers = new Set([...(local.deletedUserIds || []), ...(remote.deletedUserIds || [])]);
   const deletedPatients = new Set([...(local.deletedPatientIds || []), ...(remote.deletedPatientIds || [])]);
@@ -382,13 +423,28 @@ function mergeStatesDirect(local: MasterCloudState, remote: MasterCloudState): M
     }
   });
 
-  // Fusionar tenants
+  // Fusionar tenants con resolución inteligente de alias
   const mergedTenants: Record<string, CloudTenantData> = { ...(remote.tenants || {}) };
   Object.keys(local.tenants || {}).forEach((tId) => {
     const lTenant = local.tenants[tId];
-    const rTenant = mergedTenants[tId];
+    if (!lTenant) return;
+
+    // Buscar si ya existe un tenant en mergedTenants bajo tId o bajo una clave alias (ej. therapist_dra_rivas)
+    let targetKey = tId;
+    if (!mergedTenants[targetKey]) {
+      const foundAlias = Object.keys(mergedTenants).find((k) => {
+        const cleanK = k.replace(/^therapist[-_]/, '');
+        const cleanT = tId.replace(/^therapist[-_]/, '');
+        return cleanK === cleanT || cleanK.includes(cleanT) || cleanT.includes(cleanK);
+      });
+      if (foundAlias) {
+        targetKey = foundAlias;
+      }
+    }
+
+    const rTenant = mergedTenants[targetKey];
     if (!rTenant) {
-      mergedTenants[tId] = lTenant;
+      mergedTenants[targetKey] = lTenant;
     } else {
       const patientMap = new Map<string, Patient>();
       (rTenant.patients || []).forEach((p) => p && p.id && !deletedPatients.has(p.id) && patientMap.set(p.id, p));
@@ -400,23 +456,43 @@ function mergeStatesDirect(local: MasterCloudState, remote: MasterCloudState): M
         } else {
           const lT = new Date(p.updatedAt || p.createdAt || 0).getTime();
           const rT = new Date(ex.updatedAt || ex.createdAt || 0).getTime();
-          patientMap.set(p.id, lT >= rT ? p : ex);
+          patientMap.set(p.id, lT >= rT ? { ...ex, ...p } : { ...p, ...ex });
         }
       });
 
       const apptMap = new Map<string, Appointment>();
       (rTenant.appointments || []).forEach((a) => a && a.id && apptMap.set(a.id, a));
-      (lTenant.appointments || []).forEach((a) => a && a.id && apptMap.set(a.id, a));
+      (lTenant.appointments || []).forEach((a) => {
+        if (!a || !a.id) return;
+        const ex = apptMap.get(a.id);
+        if (!ex) {
+          apptMap.set(a.id, a);
+        } else {
+          const lT = new Date(a.updatedAt || a.createdAt || 0).getTime();
+          const rT = new Date(ex.updatedAt || ex.createdAt || 0).getTime();
+          apptMap.set(a.id, lT >= rT ? { ...ex, ...a } : { ...a, ...ex });
+        }
+      });
 
       const noteMap = new Map<string, ClinicalNote>();
       (rTenant.notes || []).forEach((n) => n && n.id && noteMap.set(n.id, n));
-      (lTenant.notes || []).forEach((n) => n && n.id && noteMap.set(n.id, n));
+      (lTenant.notes || []).forEach((n) => {
+        if (!n || !n.id) return;
+        const ex = noteMap.get(n.id);
+        if (!ex) {
+          noteMap.set(n.id, n);
+        } else {
+          const lT = new Date(n.updatedAt || n.createdAt || 0).getTime();
+          const rT = new Date(ex.updatedAt || ex.createdAt || 0).getTime();
+          noteMap.set(n.id, lT >= rT ? { ...ex, ...n } : { ...n, ...ex });
+        }
+      });
 
       const attMap = new Map<string, Attachment>();
       (rTenant.attachments || []).forEach((att) => att && att.id && attMap.set(att.id, att));
       (lTenant.attachments || []).forEach((att) => att && att.id && attMap.set(att.id, att));
 
-      mergedTenants[tId] = {
+      mergedTenants[targetKey] = {
         ...rTenant,
         ...lTenant,
         patients: Array.from(patientMap.values()),
@@ -772,6 +848,7 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
       const u = mergedUsers.find((user) => user && user.id === canonicalId);
       const emailKey = (u?.email || '').toLowerCase();
       const cleanEmail = emailKey.replace(/[^a-z0-9]/g, '_');
+      const emailUser = emailKey.split('@')[0].replace(/[^a-z0-9]/g, '_');
       const pKey = `psychocare_db_patients_${canonicalId}`;
       const aKey = `psychocare_db_appointments_${canonicalId}`;
       const nKey = `psychocare_db_notes_${canonicalId}`;
@@ -784,7 +861,11 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
 
       Object.keys(cloudTenants).forEach((k) => {
         if (k !== canonicalId && k !== u?.id) {
-          if ((cleanEmail && k.includes(cleanEmail)) || k.startsWith('therapist-')) {
+          const isMatch =
+            (cleanEmail && (k.includes(cleanEmail) || cleanEmail.includes(k.replace(/^therapist[-_]/, '')))) ||
+            (emailUser && (k.includes(emailUser) || emailUser.includes(k.replace(/^therapist[-_]/, '')))) ||
+            (canonicalId && (k.includes(canonicalId) || canonicalId.includes(k)));
+          if (isMatch) {
             const t = cloudTenants[k];
             if (t && (t.patients?.length || t.appointments?.length || t.notes?.length)) {
               matchingCloudTenants.push(t);
@@ -810,7 +891,11 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && k.startsWith('psychocare_db_patients_') && k !== pKey) {
-          if (k.includes(cleanEmail) || (canonicalId.startsWith('therapist-') && k.includes(canonicalId))) {
+          const isKeyMatch =
+            (cleanEmail && (k.includes(cleanEmail) || cleanEmail.includes(k.replace(/^psychocare_db_patients_therapist[-_]/, '')))) ||
+            (emailUser && (k.includes(emailUser) || emailUser.includes(k.replace(/^psychocare_db_patients_therapist[-_]/, '')))) ||
+            (canonicalId && (k.includes(canonicalId) || canonicalId.includes(k)));
+          if (isKeyMatch) {
             try {
               const extraPatients = JSON.parse(localStorage.getItem(k) || '[]');
               if (Array.isArray(extraPatients) && extraPatients.length > 0) {
@@ -831,7 +916,11 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && k.startsWith('psychocare_db_appointments_') && k !== aKey) {
-          if (k.includes(cleanEmail) || (canonicalId.startsWith('therapist-') && k.includes(canonicalId))) {
+          const isKeyMatch =
+            (cleanEmail && (k.includes(cleanEmail) || cleanEmail.includes(k.replace(/^psychocare_db_appointments_therapist[-_]/, '')))) ||
+            (emailUser && (k.includes(emailUser) || emailUser.includes(k.replace(/^psychocare_db_appointments_therapist[-_]/, '')))) ||
+            (canonicalId && (k.includes(canonicalId) || canonicalId.includes(k)));
+          if (isKeyMatch) {
             try {
               const extraAppts = JSON.parse(localStorage.getItem(k) || '[]');
               if (Array.isArray(extraAppts)) localAppointments.push(...extraAppts);
@@ -850,7 +939,11 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && k.startsWith('psychocare_db_notes_') && k !== nKey) {
-          if (k.includes(cleanEmail) || (canonicalId.startsWith('therapist-') && k.includes(canonicalId))) {
+          const isKeyMatch =
+            (cleanEmail && (k.includes(cleanEmail) || cleanEmail.includes(k.replace(/^psychocare_db_notes_therapist[-_]/, '')))) ||
+            (emailUser && (k.includes(emailUser) || emailUser.includes(k.replace(/^psychocare_db_notes_therapist[-_]/, '')))) ||
+            (canonicalId && (k.includes(canonicalId) || canonicalId.includes(k)));
+          if (isKeyMatch) {
             try {
               const extraNotes = JSON.parse(localStorage.getItem(k) || '[]');
               if (Array.isArray(extraNotes)) localNotes.push(...extraNotes);
@@ -890,6 +983,8 @@ export async function syncLocalWithCloud(): Promise<MasterCloudState | null> {
           const remoteTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
           if (localTime >= remoteTime) {
             patientMap.set(p.id, { ...existing, ...p, therapistId: canonicalId });
+          } else {
+            patientMap.set(p.id, { ...p, ...existing, therapistId: canonicalId });
           }
         }
       });
