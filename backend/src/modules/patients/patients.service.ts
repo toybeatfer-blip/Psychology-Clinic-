@@ -64,17 +64,75 @@ export async function getPatients(
     }),
   ]);
 
-  return {
-    data: patients.map((p: any) => ({
+  const masterState = await cloudSyncService.getMasterState();
+  const userMap = new Map<string, { fullName: string; email: string }>();
+  (masterState.users || []).forEach((u) => {
+    if (u && u.id) userMap.set(u.id, { fullName: u.fullName, email: u.email });
+  });
+
+  const patientMap = new Map<string, any>();
+
+  // 1. Cargar pacientes de tenants cloud
+  if (masterState.tenants) {
+    Object.entries(masterState.tenants).forEach(([tKey, tenant]) => {
+      if (!isAdmin && tKey !== therapistId && !tKey.includes(therapistId)) {
+        return;
+      }
+      if (isAdmin && therapistFilter && therapistFilter !== 'ALL' && tKey !== therapistFilter && !tKey.includes(therapistFilter)) {
+        return;
+      }
+      (tenant.patients || []).forEach((p: any) => {
+        if (!p || !p.id) return;
+        const therapistInfo = userMap.get(p.therapistId) || userMap.get(tKey);
+        patientMap.set(p.id, {
+          ...p,
+          therapistName: therapistInfo?.fullName || undefined,
+          therapistEmail: therapistInfo?.email || undefined,
+          _count: {
+            appointments: (tenant.appointments || []).filter((a: any) => a.patientId === p.id).length,
+            clinicalNotes: (tenant.notes || []).filter((n: any) => n.patientId === p.id).length,
+            attachments: (tenant.attachments || []).filter((att: any) => att.patientId === p.id).length,
+          },
+        });
+      });
+    });
+  }
+
+  // 2. Fusionar pacientes de Prisma (tienen prioridad)
+  patients.forEach((p: any) => {
+    patientMap.set(p.id, {
       ...p,
       therapistName: p.therapist?.fullName || undefined,
       therapistEmail: p.therapist?.email || undefined,
-    })),
+    });
+  });
+
+  let allPatients = Array.from(patientMap.values());
+
+  if (typeof isActive === 'boolean') {
+    allPatients = allPatients.filter((p) => (p.isActive ?? true) === isActive);
+  }
+  if (search && search.trim() !== '') {
+    const s = search.trim().toLowerCase();
+    allPatients = allPatients.filter(
+      (p) =>
+        (p.fullName && p.fullName.toLowerCase().includes(s)) ||
+        (p.email && p.email.toLowerCase().includes(s)) ||
+        (p.phone && p.phone.toLowerCase().includes(s)) ||
+        (p.occupation && p.occupation.toLowerCase().includes(s))
+    );
+  }
+
+  const effectiveTotal = Math.max(total, allPatients.length);
+  const pagedPatients = allPatients.slice(skip, skip + limit);
+
+  return {
+    data: pagedPatients,
     pagination: {
-      total,
+      total: effectiveTotal,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(effectiveTotal / limit) || 1,
     },
   };
 }
@@ -105,6 +163,34 @@ export async function getPatientById(therapistId: string, patientId: string, isA
   });
 
   if (!patient) {
+    const masterState = await cloudSyncService.getMasterState();
+    let foundPatient: any = null;
+    let foundTenant: any = null;
+
+    if (masterState.tenants) {
+      for (const [tKey, tenant] of Object.entries(masterState.tenants)) {
+        if (!isAdmin && tKey !== therapistId && !tKey.includes(therapistId)) continue;
+        const p = (tenant.patients || []).find((x: any) => x && x.id === patientId);
+        if (p) {
+          foundPatient = p;
+          foundTenant = tenant;
+          break;
+        }
+      }
+    }
+
+    if (foundPatient) {
+      const u = (masterState.users || []).find((usr) => usr.id === foundPatient.therapistId);
+      return {
+        ...foundPatient,
+        therapistName: u?.fullName || undefined,
+        therapistEmail: u?.email || undefined,
+        appointments: (foundTenant.appointments || []).filter((a: any) => a.patientId === patientId),
+        clinicalNotes: (foundTenant.notes || []).filter((n: any) => n.patientId === patientId),
+        attachments: (foundTenant.attachments || []).filter((att: any) => att.patientId === patientId),
+      };
+    }
+
     throw new Error('Paciente no encontrado o no tiene permisos para acceder a este registro.');
   }
 

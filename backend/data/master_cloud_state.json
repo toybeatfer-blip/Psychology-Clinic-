@@ -1,12 +1,4 @@
 {
-  "adminContact": {
-    "adminName": "Fernando",
-    "phoneWhatsApp": "+52 474 1539891",
-    "email": "toybeatfer@gmail.com",
-    "helpMessage": "Para soporte técnico, alta de consultorios o dudas del sistema, comunícate directamente con el Creador.",
-    "updatedAt": "2026-01-01T00:00:00.000Z"
-  },
-  "deletedPatientIds": [],
   "users": [
     {
       "id": "c9a88189-5cfd-4ef3-8330-4b51c808e7bd",
@@ -14,7 +6,7 @@
       "fullName": "Fernando (Super Administrador)",
       "role": "ADMIN",
       "createdAt": "2026-09-04T02:01:50.459Z",
-      "updatedAt": "2026-09-10T06:00:06.491Z",
+      "updatedAt": "2026-09-17T21:33:24.815Z",
       "profile": {
         "id": "9ddd03ec-9662-46e9-a06a-3062e88859d7",
         "userId": "c9a88189-5cfd-4ef3-8330-4b51c808e7bd",
@@ -27,7 +19,7 @@
         "currency": "USD",
         "avatarUrl": "",
         "createdAt": "2026-09-04T02:01:50.459Z",
-        "updatedAt": "2026-09-10T06:00:06.491Z"
+        "updatedAt": "2026-09-04T02:01:50.459Z"
       },
       "clinicSettings": {
         "id": "0526bcb7-5391-42f7-a371-bb9fda7a8fbd",
@@ -48,6 +40,26 @@
         "appointmentNotice": null,
         "createdAt": "2026-09-04T02:01:50.459Z",
         "updatedAt": "2026-09-04T02:01:50.459Z"
+      }
+    },
+    {
+      "id": "therapist_dra_rivas",
+      "email": "dra.rivas@psychocare.com",
+      "fullName": "Dra. Rivas Psicología",
+      "role": "THERAPIST",
+      "status": "ACTIVE",
+      "createdAt": "2026-09-04T03:33:19.000Z",
+      "updatedAt": "2026-09-04T03:33:19.000Z",
+      "profile": {
+        "id": "prof_dra_rivas",
+        "userId": "therapist_dra_rivas",
+        "professionalId": "632782",
+        "specialty": "Psicología Clínica y Terapia Cognitivo Conductual",
+        "phone": "+52 474 1539891",
+        "hourlyRate": 800,
+        "currency": "MXN",
+        "createdAt": "2026-09-04T03:33:19.000Z",
+        "updatedAt": "2026-09-04T03:33:19.000Z"
       }
     },
     {
@@ -74,6 +86,44 @@
     }
   ],
   "tenants": {
+    "therapist_dra_rivas": {
+      "patients": [
+        {
+          "id": "patient_test_sync_001",
+          "therapistId": "therapist_dra_rivas",
+          "fullName": "Mariana Ríos Soto",
+          "email": "mariana.rios@gmail.com",
+          "phone": "55 4433 2211",
+          "birthDate": "1992-05-14",
+          "gender": "FEMALE",
+          "occupation": "Diseñadora Gráfica",
+          "emergencyContactName": "Carlos Ríos",
+          "emergencyContactPhone": "55 1122 3344",
+          "reasonForConsultation": "Ansiedad y manejo de estrés laboral",
+          "createdAt": "2026-09-04T12:00:00.000Z",
+          "updatedAt": "2026-09-04T12:00:00.000Z"
+        }
+      ],
+      "appointments": [],
+      "notes": [
+        {
+          "id": "note_test_sync_001",
+          "patientId": "patient_test_sync_001",
+          "therapistId": "therapist_dra_rivas",
+          "sessionDate": "2026-09-04",
+          "sessionNumber": 1,
+          "subjectiveText": "Paciente refiere dificultad para conciliar el sueño y tensión muscular.",
+          "objectiveText": "Orientada en tiempo y espacio, lenguaje coherente, afecto ansioso.",
+          "assessmentText": "Episodio de estrés laboral agudo con sintomatología ansiosa leve.",
+          "planText": "Técnicas de respiración diafragmática y registro de pensamientos automáticos.",
+          "createdAt": "2026-09-04T12:00:00.000Z",
+          "updatedAt": "2026-09-04T12:00:00.000Z"
+        }
+      ],
+      "attachments": [],
+      "updatedAt": "2026-09-04T23:50:25.084Z",
+      "lastActivityAt": "2026-09-04T23:50:25.084Z"
+    },
     "c9a88189-5cfd-4ef3-8330-4b51c808e7bd": {
       "patients": [],
       "appointments": [],
@@ -102,7 +152,7 @@
       "tests": {},
       "consents": {},
       "evaluations": {},
-      "updatedAt": "2026-09-10T06:00:06.491Z",
+      "updatedAt": "2026-09-17T21:33:30.450Z",
       "lastActivityAt": "2026-09-04T02:01:50.459Z"
     },
     "f64865f4-ed1d-42ff-a0ab-45898aabe93b": {
@@ -118,5 +168,12 @@
     }
   },
   "deletedUserIds": [],
-  "lastSync": "2026-09-10T06:00:06.491Z"
+  "lastSync": "2026-09-17T21:33:30.450Z",
+  "adminContact": {
+    "adminName": "Fernando",
+    "phoneWhatsApp": "+52 474 1539891",
+    "email": "toybeatfer@gmail.com",
+    "helpMessage": "Para soporte técnico, alta de consultorios o dudas del sistema, comunícate directamente con el Creador.",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  }
 }

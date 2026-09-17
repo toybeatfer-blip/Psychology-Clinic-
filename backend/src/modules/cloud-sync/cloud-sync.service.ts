@@ -38,7 +38,8 @@ export interface MasterCloudState {
   lastSync: string;
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const ROOT_DIR = process.cwd().endsWith('backend') ? path.resolve(process.cwd(), '..') : process.cwd();
+const DATA_DIR = path.resolve(ROOT_DIR, 'data');
 const STATE_FILE = path.resolve(DATA_DIR, 'master_cloud_state.json');
 
 // Estado en memoria para máximo rendimiento
@@ -49,14 +50,20 @@ let inMemoryState: MasterCloudState = {
   lastSync: new Date().toISOString(),
 };
 
-// Cargar estado inicial desde disco buscando en rutas posibles
+// Cargar estado inicial desde disco buscando en rutas posibles (priorizando raíz)
 function loadStateFromDisk(): void {
   const candidateFiles = [
+    path.resolve(ROOT_DIR, 'data/master_cloud_state.json'),
     STATE_FILE,
     path.resolve(process.cwd(), 'backend/data/master_cloud_state.json'),
+    path.resolve(process.cwd(), 'data/master_cloud_state.json'),
     path.resolve(__dirname, '../../data/master_cloud_state.json'),
     path.resolve(__dirname, '../../../data/master_cloud_state.json'),
   ];
+
+  const seenUsers = new Map<string, CloudStoredUser>();
+  const mergedTenants: Record<string, CloudTenantData> = {};
+  let bestAdminContact: any = null;
 
   for (const file of candidateFiles) {
     try {
@@ -65,15 +72,60 @@ function loadStateFromDisk(): void {
         if (raw && raw.trim()) {
           const parsed = JSON.parse(raw);
           if (parsed && Array.isArray(parsed.users)) {
-            inMemoryState = parsed;
-            console.log(`📂 Estado maestro cargado desde: ${file} (${inMemoryState.users.length} usuarios)`);
-            return;
+            parsed.users.forEach((u: CloudStoredUser) => {
+              if (!u || !u.email) return;
+              const k = u.email.toLowerCase();
+              const existing = seenUsers.get(k);
+              seenUsers.set(k, existing ? { ...existing, ...u } : u);
+            });
+
+            if (parsed.tenants) {
+              Object.keys(parsed.tenants).forEach((tKey) => {
+                const incomingT = parsed.tenants[tKey];
+                const existingT = mergedTenants[tKey];
+                if (!existingT) {
+                  mergedTenants[tKey] = incomingT;
+                } else {
+                  // Merge lists by ID
+                  const pMap = new Map();
+                  (existingT.patients || []).forEach((p: any) => p?.id && pMap.set(p.id, p));
+                  (incomingT.patients || []).forEach((p: any) => p?.id && pMap.set(p.id, p));
+
+                  const aMap = new Map();
+                  (existingT.appointments || []).forEach((a: any) => a?.id && aMap.set(a.id, a));
+                  (incomingT.appointments || []).forEach((a: any) => a?.id && aMap.set(a.id, a));
+
+                  const nMap = new Map();
+                  (existingT.notes || []).forEach((n: any) => n?.id && nMap.set(n.id, n));
+                  (incomingT.notes || []).forEach((n: any) => n?.id && nMap.set(n.id, n));
+
+                  mergedTenants[tKey] = {
+                    ...existingT,
+                    ...incomingT,
+                    patients: Array.from(pMap.values()),
+                    appointments: Array.from(aMap.values()),
+                    notes: Array.from(nMap.values()),
+                  };
+                }
+              });
+            }
+
+            if (parsed.adminContact && !bestAdminContact) {
+              bestAdminContact = parsed.adminContact;
+            }
           }
         }
       }
     } catch (err) {
       console.warn('[CloudSyncBackend] Error al leer estado desde:', file, err);
     }
+  }
+
+  if (seenUsers.size > 0) {
+    inMemoryState.users = Array.from(seenUsers.values());
+    inMemoryState.tenants = mergedTenants;
+    if (bestAdminContact) inMemoryState.adminContact = bestAdminContact;
+    console.log(`📂 Estado maestro consolidado: ${inMemoryState.users.length} usuarios, ${Object.keys(inMemoryState.tenants).length} consultorios.`);
   }
 
   try {
@@ -85,13 +137,29 @@ function loadStateFromDisk(): void {
 
 // Guardar estado en disco de forma segura
 function saveStateToDisk(): void {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+  const targetFiles = [
+    STATE_FILE,
+    path.resolve(ROOT_DIR, 'data/master_cloud_state.json'),
+    path.resolve(process.cwd(), 'data/master_cloud_state.json'),
+    path.resolve(process.cwd(), 'backend/data/master_cloud_state.json'),
+  ];
+
+  const payload = JSON.stringify(inMemoryState, null, 2);
+  const seenPaths = new Set<string>();
+
+  for (const target of targetFiles) {
+    try {
+      const resolved = path.resolve(target);
+      if (seenPaths.has(resolved)) continue;
+      seenPaths.add(resolved);
+
+      const dir = path.dirname(resolved);
+      if (fs.existsSync(dir)) {
+        fs.writeFileSync(resolved, payload, 'utf-8');
+      }
+    } catch (err) {
+      console.error('[CloudSyncBackend] Error al guardar estado en disco:', err);
     }
-    fs.writeFileSync(STATE_FILE, JSON.stringify(inMemoryState, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('[CloudSyncBackend] Error al guardar estado en disco:', err);
   }
 }
 
